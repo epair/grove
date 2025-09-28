@@ -1,3 +1,6 @@
+import os
+import sys
+from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Static, ListView, ListItem, Label
 
@@ -13,6 +16,20 @@ class Sidebar(ListView):
         yield ListItem(Label("One"))
         yield ListItem(Label("Two"))
         yield ListItem(Label("Three"))
+
+def is_bare_git_repository():
+    """Check if current directory or parent contains a bare git repository."""
+    current_path = Path.cwd()
+
+    # Check current directory for .bare subdirectory
+    if (current_path / ".bare").is_dir():
+        return True
+
+    # Check parent directory for .bare subdirectory
+    if (current_path.parent / ".bare").is_dir():
+        return True
+
+    return False
 
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
@@ -34,5 +51,9 @@ class GroveApp(App):
 
 
 if __name__ == "__main__":
+    if not is_bare_git_repository():
+        print("Error: Grove must be run from a bare git repository (directory containing '.bare' subdirectory)", file=sys.stderr)
+        sys.exit(1)
+
     app = GroveApp()
     app.run()
