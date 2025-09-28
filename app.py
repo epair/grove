@@ -20,7 +20,7 @@ class Sidebar(ListView):
         else:
             yield ListItem(Label("No directories found"))
 
-def is_bare_git_repository():
+def is_bare_git_repository() -> bool:
     """Check if current directory or parent contains a bare git repository."""
     current_path = Path.cwd()
 
@@ -34,10 +34,10 @@ def is_bare_git_repository():
 
     return False
 
-def get_worktree_directories():
+def get_worktree_directories() -> list[str]:
     """Get directories at the same level as .bare directory, excluding hidden directories."""
     current_path = Path.cwd()
-    bare_parent = None
+    bare_parent: Path | None = None
 
     # Find where the .bare directory is located
     if (current_path / ".bare").is_dir():
@@ -49,7 +49,7 @@ def get_worktree_directories():
         return []
 
     # Get all directories at the same level as .bare, excluding hidden ones
-    directories = []
+    directories: list[str] = []
     for item in bare_parent.iterdir():
         if item.is_dir() and not item.name.startswith('.'):
             directories.append(item.name)

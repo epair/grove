@@ -1,6 +1,7 @@
 import os
 import pytest
 from pathlib import Path
+from typing import Generator
 from textual.widgets import ListView, ListItem, Label
 from app import GroveApp, get_worktree_directories, is_bare_git_repository
 
@@ -9,23 +10,23 @@ class TestGroveIntegration:
     """Integration tests for Grove TUI worktree directory listing."""
 
     @pytest.fixture
-    def example_repo_path(self):
+    def example_repo_path(self) -> Path:
         """Fixture that provides the path to the example repo."""
         return Path(__file__).parent / "example_repo"
 
     @pytest.fixture
-    def change_to_example_repo(self, example_repo_path):
+    def change_to_example_repo(self, example_repo_path: Path) -> Generator[Path, None, None]:
         """Fixture that temporarily changes working directory to example repo."""
         original_cwd = os.getcwd()
         os.chdir(example_repo_path)
         yield example_repo_path
         os.chdir(original_cwd)
 
-    def test_is_bare_git_repository_detection(self, change_to_example_repo):
+    def test_is_bare_git_repository_detection(self, change_to_example_repo: Path) -> None:
         """Test that the bare git repository is correctly detected."""
         assert is_bare_git_repository() is True
 
-    def test_get_worktree_directories(self, change_to_example_repo):
+    def test_get_worktree_directories(self, change_to_example_repo: Path) -> None:
         """Test that worktree directories are correctly identified and sorted."""
         directories = get_worktree_directories()
 
@@ -38,7 +39,7 @@ class TestGroveIntegration:
         assert ".git" not in directories
         assert ".grove" not in directories
 
-    async def test_grove_app_sidebar_content(self, change_to_example_repo):
+    async def test_grove_app_sidebar_content(self, change_to_example_repo: Path) -> None:
         """Test that the Grove app's sidebar displays the correct worktree directories."""
         app = GroveApp()
 
@@ -59,7 +60,7 @@ class TestGroveIntegration:
             expected_directories = ["bugfix-01", "feature-one"]
             assert directory_labels == expected_directories
 
-    async def test_grove_app_starts_successfully(self, change_to_example_repo):
+    async def test_grove_app_starts_successfully(self, change_to_example_repo: Path) -> None:
         """Test that the Grove app starts successfully in a bare git repository."""
         app = GroveApp()
 
@@ -73,7 +74,7 @@ class TestGroveIntegration:
             list_items = sidebar.query(ListItem)
             assert len(list_items) > 0
 
-    def test_get_worktree_directories_outside_bare_repo(self, tmp_path):
+    def test_get_worktree_directories_outside_bare_repo(self, tmp_path: Path) -> None:
         """Test that get_worktree_directories returns empty list when not in a bare repo."""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
@@ -84,7 +85,7 @@ class TestGroveIntegration:
         finally:
             os.chdir(original_cwd)
 
-    def test_is_bare_git_repository_outside_bare_repo(self, tmp_path):
+    def test_is_bare_git_repository_outside_bare_repo(self, tmp_path: Path) -> None:
         """Test that is_bare_git_repository returns False when not in a bare repo."""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)

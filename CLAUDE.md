@@ -53,7 +53,12 @@ python -m pytest tests/ -v
 python -m pytest tests/test_integration.py -v
 ```
 
-**Note:** Always use `python -m pytest` instead of `pytest` directly to ensure proper Python path setup for module imports.
+**Type checking:**
+```bash
+mypy app.py tests/
+```
+
+**Note:** Always use `python -m pytest` instead of `pytest` directly to ensure proper Python path setup for module imports. The codebase uses comprehensive type hints throughout - all functions should include return type annotations and parameter types where applicable.
 
 ## Requirements
 
