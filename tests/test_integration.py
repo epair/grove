@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Generator
 from unittest.mock import patch
 from textual.widgets import ListView, ListItem, Label
-from app import GroveApp, get_worktree_directories, is_bare_git_repository, get_active_tmux_sessions
+from app import GroveApp, get_worktree_directories, is_bare_git_repository, get_active_tmux_sessions, get_worktree_metadata, get_worktree_git_info, MetadataDisplay
 
 
 class TestGroveIntegration:
@@ -164,3 +164,148 @@ class TestGroveIntegration:
             # Verify feature-one has filled circle, bugfix-01 has empty circle
             expected_directories = ["○ bugfix-01", "● feature-one"]
             assert directory_labels == expected_directories
+
+    def test_get_worktree_metadata_with_content(self, change_to_example_repo: Path) -> None:
+        """Test that get_worktree_metadata reads metadata files correctly."""
+        metadata = get_worktree_metadata("feature-one")
+
+        # Verify all expected metadata keys are present
+        assert "description" in metadata
+        assert "pr" in metadata
+        assert "notes" in metadata
+
+        # Verify content matches what we expect from the test files
+        assert "user authentication" in metadata["description"].lower()
+        assert "PR #123" in metadata["pr"]
+        assert "password reset" in metadata["notes"]
+
+    def test_get_worktree_metadata_missing_worktree(self, change_to_example_repo: Path) -> None:
+        """Test that get_worktree_metadata handles missing worktree gracefully."""
+        metadata = get_worktree_metadata("nonexistent-worktree")
+
+        # Should return empty dict for nonexistent worktree
+        assert metadata == {}
+
+    def test_get_worktree_metadata_outside_bare_repo(self, tmp_path: Path) -> None:
+        """Test that get_worktree_metadata returns empty dict when not in a bare repo."""
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
+
+        try:
+            metadata = get_worktree_metadata("any-worktree")
+            assert metadata == {}
+        finally:
+            os.chdir(original_cwd)
+
+    @patch('app.subprocess.run')
+    def test_get_worktree_git_info_success(self, mock_run: Any, change_to_example_repo: Path) -> None:
+        """Test that get_worktree_git_info correctly parses git log output."""
+        from subprocess import CompletedProcess
+
+        # Mock successful git log command
+        mock_run.return_value = CompletedProcess(
+            args=['git', '-C', 'feature-one', 'log', '-1', '--format=%s%n%ci%n%an <%ae>'],
+            returncode=0,
+            stdout='Add authentication system\n2024-09-28 10:30:45 -0700\nJohn Doe <john@example.com>\n',
+            stderr=''
+        )
+
+        git_info = get_worktree_git_info("feature-one")
+
+        assert git_info["commit_message"] == "Add authentication system"
+        assert git_info["commit_date"] == "2024-09-28 10:30:45 -0700"
+        assert git_info["committer"] == "John Doe <john@example.com>"
+
+    @patch('app.subprocess.run')
+    def test_get_worktree_git_info_failure(self, mock_run: Any, change_to_example_repo: Path) -> None:
+        """Test that get_worktree_git_info handles git command failure gracefully."""
+        from subprocess import CompletedProcess
+
+        # Mock failed git log command
+        mock_run.return_value = CompletedProcess(
+            args=['git', '-C', 'feature-one', 'log', '-1', '--format=%s%n%ci%n%an <%ae>'],
+            returncode=1,
+            stdout='',
+            stderr='fatal: not a git repository'
+        )
+
+        git_info = get_worktree_git_info("feature-one")
+
+        assert git_info["commit_message"] == "N/A"
+        assert git_info["commit_date"] == "N/A"
+        assert git_info["committer"] == "N/A"
+
+    def test_get_worktree_git_info_outside_bare_repo(self, tmp_path: Path) -> None:
+        """Test that get_worktree_git_info returns N/A values when not in a bare repo."""
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
+
+        try:
+            git_info = get_worktree_git_info("any-worktree")
+            assert git_info["commit_message"] == "N/A"
+            assert git_info["commit_date"] == "N/A"
+            assert git_info["committer"] == "N/A"
+        finally:
+            os.chdir(original_cwd)
+
+    async def test_metadata_display_widget_update(self, change_to_example_repo: Path) -> None:
+        """Test that MetadataDisplay widget updates content correctly."""
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            metadata_display = app.query_one("#body", MetadataDisplay)
+
+            # Test updating with a valid worktree
+            metadata_display.update_content("feature-one")
+            content = str(metadata_display.visual)
+
+            # Verify the content contains expected sections
+            assert "# feature-one" in content
+            assert "## Description" in content
+            assert "## Pull Request Info" in content
+            assert "## Notes" in content
+            assert "## Git Information" in content
+
+            # Test updating with empty worktree name
+            metadata_display.update_content("")
+            content = str(metadata_display.visual)
+            assert "Select a worktree to view its metadata." in content
+
+    @patch('app.get_active_tmux_sessions')
+    async def test_sidebar_highlighting_updates_metadata(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that highlighting a worktree in sidebar updates the metadata display."""
+        mock_sessions.return_value = set()
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            sidebar = app.query_one("#sidebar", ListView)
+            metadata_display = app.query_one("#body", MetadataDisplay)
+
+            # Simulate highlighting the first item (bugfix-01)
+            sidebar.index = 0
+            await pilot.pause()
+
+            # Verify the selected worktree is updated
+            assert app.selected_worktree == "bugfix-01"
+
+            # Verify the metadata display shows bugfix-01 content
+            content = str(metadata_display.visual)
+            assert "# bugfix-01" in content
+
+    @patch('app.get_active_tmux_sessions')
+    async def test_reactive_selected_worktree_updates_display(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that changing selected_worktree reactive attribute updates the display."""
+        mock_sessions.return_value = set()
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            metadata_display = app.query_one("#body", MetadataDisplay)
+
+            # Change the reactive attribute directly
+            app.selected_worktree = "feature-one"
+            await pilot.pause()
+
+            # Verify the metadata display is updated
+            content = str(metadata_display.visual)
+            assert "# feature-one" in content
+            assert "user authentication" in content.lower()

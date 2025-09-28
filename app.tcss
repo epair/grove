@@ -4,3 +4,10 @@
     height: 99%;
     border: solid #7aa2f7;
 }
+
+#body {
+    padding: 1;
+    margin: 1;
+    border: solid #9ece6a;
+    height: 99%;
+}
