@@ -13,9 +13,12 @@ Docked widgets will not scroll out of view, making them ideal for sticky headers
 
 class Sidebar(ListView):
     def compose(self) -> ComposeResult:
-        yield ListItem(Label("One"))
-        yield ListItem(Label("Two"))
-        yield ListItem(Label("Three"))
+        directories = get_worktree_directories()
+        if directories:
+            for directory in directories:
+                yield ListItem(Label(directory))
+        else:
+            yield ListItem(Label("No directories found"))
 
 def is_bare_git_repository():
     """Check if current directory or parent contains a bare git repository."""
@@ -30,6 +33,28 @@ def is_bare_git_repository():
         return True
 
     return False
+
+def get_worktree_directories():
+    """Get directories at the same level as .bare directory, excluding hidden directories."""
+    current_path = Path.cwd()
+    bare_parent = None
+
+    # Find where the .bare directory is located
+    if (current_path / ".bare").is_dir():
+        bare_parent = current_path
+    elif (current_path.parent / ".bare").is_dir():
+        bare_parent = current_path.parent
+
+    if bare_parent is None:
+        return []
+
+    # Get all directories at the same level as .bare, excluding hidden ones
+    directories = []
+    for item in bare_parent.iterdir():
+        if item.is_dir() and not item.name.startswith('.'):
+            directories.append(item.name)
+
+    return sorted(directories)
 
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
