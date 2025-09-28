@@ -11,3 +11,36 @@
     border: solid #9ece6a;
     height: 99%;
 }
+
+/* Modal form styling */
+WorktreeFormScreen {
+    align: center middle;
+}
+
+#dialog {
+    width: 50;
+    height: 22;
+    padding: 1 2;
+    border: thick $primary 80%;
+    background: $surface;
+}
+
+#title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#prefix_input, #name_input {
+    margin-bottom: 1;
+}
+
+#create_button, #cancel_button {
+    margin: 0 1;
+    min-width: 10;
+}
+
+/* Ensure buttons are visible and properly spaced */
+Center {
+    margin-top: 1;
+}

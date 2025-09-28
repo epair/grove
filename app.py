@@ -1,9 +1,12 @@
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Static, ListView, ListItem, Label, Markdown
+from textual.widgets import Footer, Static, ListView, ListItem, Label, Markdown, Input, Button
+from textual.containers import Center, Vertical
+from textual.screen import ModalScreen
 from textual.reactive import reactive
 
 class Sidebar(ListView):
@@ -213,11 +216,58 @@ class MetadataDisplay(Markdown):
 
         self.update("\n".join(content_parts))
 
+class WorktreeFormScreen(ModalScreen[dict[str, str] | None]):
+    """A modal screen for creating new worktrees."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        """Create the form layout."""
+        with Vertical(id="dialog"):
+            yield Label("Create New Worktree", id="title")
+            yield Label("Prefix:")
+            yield Input(value="ep/", placeholder="ep/", id="prefix_input")
+            yield Label("Name:")
+            yield Input(placeholder="Enter worktree name", id="name_input")
+            with Center():
+                yield Button("Create", variant="primary", id="create_button")
+                yield Button("Cancel", variant="default", id="cancel_button")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events."""
+        if event.button.id == "create_button":
+            prefix = self.query_one("#prefix_input", Input).value
+            name = self.query_one("#name_input", Input).value
+
+            if not name.strip():
+                return  # Don't submit if name is empty
+
+            self.dismiss({"prefix": prefix, "name": name})
+        elif event.button.id == "cancel_button":
+            self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in input fields."""
+        if event.input.id == "name_input":
+            # Trigger create button when Enter is pressed in name field
+            prefix = self.query_one("#prefix_input", Input).value
+            name = event.input.value
+
+            if name.strip():
+                self.dismiss({"prefix": prefix, "name": name})
+
+    def action_cancel(self) -> None:
+        """Cancel the form and return to main app."""
+        self.dismiss(None)
+
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
 
     CSS_PATH = "app.tcss"
-    BINDINGS = [("d", "toggle_dark", "Toggle dark mode")]
+    BINDINGS = [
+        ("d", "toggle_dark", "Toggle dark mode"),
+        ("n", "new_worktree", "New worktree")
+    ]
 
     selected_worktree = reactive("")
 
@@ -232,6 +282,74 @@ class GroveApp(App):
         self.theme = (
             "textual-dark" if self.theme == "textual-light" else "textual-light"
         )
+
+    def action_new_worktree(self) -> None:
+        """An action to create a new worktree."""
+        self.push_screen(WorktreeFormScreen(), self.handle_worktree_creation)
+
+    def handle_worktree_creation(self, form_data: dict[str, str] | None) -> None:
+        """Handle the result from the worktree creation form."""
+        if form_data is None:
+            return  # User cancelled
+
+        prefix = form_data["prefix"]
+        name = form_data["name"]
+
+        # Set environment variable and run worktree-manager command
+        env = os.environ.copy()
+        env["WORKTREE_PREFIX"] = prefix
+
+        try:
+            # Run worktree-manager add command
+            result = subprocess.run(
+                ["worktree-manager", "add", name],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode != 0:
+                self.notify(f"Failed to create worktree: {result.stderr}", severity="error")
+                return
+
+            # Wait a moment for the worktree to be created
+            time.sleep(1)
+
+            # Find the worktree root directory (where .bare is located)
+            current_path = Path.cwd()
+            worktree_root = None
+
+            if (current_path / ".bare").is_dir():
+                worktree_root = current_path
+            elif (current_path.parent / ".bare").is_dir():
+                worktree_root = current_path.parent
+
+            if worktree_root is None:
+                self.notify("Could not find worktree root directory", severity="error")
+                return
+
+            # Run tmux-sessionizer command
+            worktree_path = worktree_root / name
+            sessionizer_result = subprocess.run(
+                ["tmux-sessionizer", str(worktree_path)],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if sessionizer_result.returncode == 0:
+                # Success - exit the application
+                self.exit()
+            else:
+                self.notify(f"Worktree created but failed to start tmux session: {sessionizer_result.stderr}", severity="warning")
+
+        except subprocess.TimeoutExpired:
+            self.notify("Command timed out", severity="error")
+        except FileNotFoundError as e:
+            self.notify(f"Command not found: {e.filename}", severity="error")
+        except Exception as e:
+            self.notify(f"Unexpected error: {str(e)}", severity="error")
 
     def on_list_view_highlighted(self, message: ListView.Highlighted) -> None:
         """Handle when a worktree is highlighted in the sidebar."""
