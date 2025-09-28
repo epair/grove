@@ -1,0 +1,4 @@
+- Need to add password reset functionality
+- Consider implementing 2FA in the future
+- Test with different browsers
+- Update documentation after merge

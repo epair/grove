@@ -1,0 +1,1 @@
+Fix for critical bug in payment processing that causes transactions to fail under high load conditions.

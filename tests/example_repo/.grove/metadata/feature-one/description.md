@@ -1,0 +1,1 @@
+This is a feature branch for implementing user authentication and session management. It includes login/logout functionality and secure token handling.
