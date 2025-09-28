@@ -20,7 +20,9 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 
 - **Main Application**: `app.py` - Single-file Textual application using Python 3.13+
 - **Styling**: `app.tcss` - Textual CSS for UI styling
-- **Dependencies**: Requires `textual` library (currently v6.1.0)
+- **Testing**: `tests/test_integration.py` - Integration tests for TUI functionality
+- **Test Data**: `tests/example_repo/` - Bare git repository structure for testing
+- **Dependencies**: Requires `textual` library (currently v6.1.0) and `pytest` for testing
 
 ### Key Components
 
@@ -40,6 +42,18 @@ python app.py # should display an error message about not running in a bare repo
 ```bash
 python -m py_compile app.py
 ```
+
+**Run tests:**
+```bash
+python -m pytest tests/ -v
+```
+
+**Run integration tests only:**
+```bash
+python -m pytest tests/test_integration.py -v
+```
+
+**Note:** Always use `python -m pytest` instead of `pytest` directly to ensure proper Python path setup for module imports.
 
 ## Requirements
 
@@ -70,3 +84,31 @@ repository/
 │           └── notes.md
 ├── feature-one/
 └── bugfix-01/
+
+## Testing Infrastructure
+
+The project includes comprehensive integration tests that validate the TUI functionality:
+
+### Test Structure
+
+- **Integration Tests**: `tests/test_integration.py` - Tests core TUI functionality including:
+  - Bare git repository detection
+  - Worktree directory discovery and listing
+  - UI sidebar content validation
+  - Hidden directory exclusion (`.bare`, `.git`, `.grove`)
+  - App startup and error handling
+
+- **Test Data**: `tests/example_repo/` - Complete bare git repository structure with:
+  - `.bare/` directory (bare git repo)
+  - `feature-one/` and `bugfix-01/` worktree directories
+  - `.grove/metadata/` structure for testing metadata features
+
+### Test Configuration
+
+- **pytest.ini**: Configured for async test support and proper test discovery
+- **Async Testing**: Uses Textual's built-in testing capabilities with `app.run_test()`
+- **Fixtures**: Provides directory switching and test isolation
+
+### Running Tests
+
+All tests must be run with `python -m pytest` to ensure proper module import resolution. The test suite validates both the core functions (`is_bare_git_repository()`, `get_worktree_directories()`) and the full TUI interface integration.
