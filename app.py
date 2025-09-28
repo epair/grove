@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 from pathlib import Path
 from textual.app import App, ComposeResult
@@ -14,9 +15,12 @@ Docked widgets will not scroll out of view, making them ideal for sticky headers
 class Sidebar(ListView):
     def compose(self) -> ComposeResult:
         directories = get_worktree_directories()
+        sessions = get_active_tmux_sessions()
+
         if directories:
             for directory in directories:
-                yield ListItem(Label(directory))
+                icon = "●" if directory in sessions else "○"
+                yield ListItem(Label(f"{icon} {directory}"))
         else:
             yield ListItem(Label("No directories found"))
 
@@ -55,6 +59,21 @@ def get_worktree_directories() -> list[str]:
             directories.append(item.name)
 
     return sorted(directories)
+
+def get_active_tmux_sessions() -> set[str]:
+    """Get names of all active tmux sessions using tmux format strings."""
+    try:
+        result = subprocess.run(
+            ['tmux', 'list-sessions', '-F', '#{session_name}'],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return set(result.stdout.strip().split('\n'))
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+    return set()
 
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
