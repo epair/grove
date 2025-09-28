@@ -1,6 +1,6 @@
 #sidebar {
     dock: left;
-    width: 15;
+    width: 35;
     height: 99%;
-    border: solid green;
+    border: solid #7aa2f7;
 }
