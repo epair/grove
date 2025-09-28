@@ -257,7 +257,7 @@ class TestGroveIntegration:
 
             # Test updating with a valid worktree
             metadata_display.update_content("feature-one")
-            content = str(metadata_display.visual)
+            content = str(metadata_display.source)
 
             # Verify the content contains expected sections
             assert "# feature-one" in content
@@ -268,7 +268,7 @@ class TestGroveIntegration:
 
             # Test updating with empty worktree name
             metadata_display.update_content("")
-            content = str(metadata_display.visual)
+            content = str(metadata_display.source)
             assert "Select a worktree to view its metadata." in content
 
     @patch('app.get_active_tmux_sessions')
@@ -289,7 +289,7 @@ class TestGroveIntegration:
             assert app.selected_worktree == "bugfix-01"
 
             # Verify the metadata display shows bugfix-01 content
-            content = str(metadata_display.visual)
+            content = str(metadata_display.source)
             assert "# bugfix-01" in content
 
     @patch('app.get_active_tmux_sessions')
@@ -306,6 +306,6 @@ class TestGroveIntegration:
             await pilot.pause()
 
             # Verify the metadata display is updated
-            content = str(metadata_display.visual)
+            content = str(metadata_display.source)
             assert "# feature-one" in content
             assert "user authentication" in content.lower()

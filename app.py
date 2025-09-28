@@ -3,15 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Static, ListView, ListItem, Label
+from textual.widgets import Footer, Static, ListView, ListItem, Label, Markdown
 from textual.reactive import reactive
-
-TEXT = """\
-Docking a widget removes it from the layout and fixes its position, aligned to either the top, right, bottom, or left edges of a container.
-
-Docked widgets will not scroll out of view, making them ideal for sticky headers, footers, and sidebars.
-
-"""
 
 class Sidebar(ListView):
     def compose(self) -> ComposeResult:
@@ -146,7 +139,7 @@ def get_worktree_git_info(worktree_name: str) -> dict[str, str]:
 
     return {"commit_message": "N/A", "commit_date": "N/A", "committer": "N/A"}
 
-class MetadataDisplay(Static):
+class MetadataDisplay(Markdown):
     """Widget to display worktree metadata and git information."""
 
     def update_content(self, worktree_name: str) -> None:
@@ -210,8 +203,11 @@ class MetadataDisplay(Static):
         # Add git information
         content_parts.extend([
             "## Git Information",
+            "",
             f"**Last Commit:** {git_info['commit_message']}",
+            "",
             f"**Date:** {git_info['commit_date']}",
+            "",
             f"**Committer:** {git_info['committer']}",
         ])
 
