@@ -113,6 +113,34 @@ def get_worktree_pr_status() -> set[str]:
 
     return pr_worktrees
 
+def check_remote_branch_exists(worktree_path: Path) -> bool:
+    """Check if the remote upstream branch exists for a worktree.
+
+    Returns True if remote branch exists, False if it's gone or there's no upstream.
+    """
+    try:
+        # Use git status to check if upstream branch is gone
+        result = subprocess.run(
+            ['git', '-C', str(worktree_path), 'status', '-b', '--porcelain'],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode == 0 and result.stdout:
+            # Check if the first line contains [gone]
+            first_line = result.stdout.strip().split('\n')[0]
+            if '[gone]' in first_line:
+                return False
+            # If there's tracking info without [gone], the branch exists
+            if '...' in first_line:
+                return True
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+    # If we can't determine, assume it exists to be safe
+    return True
+
 def get_worktree_metadata(worktree_name: str) -> dict[str, str]:
     """Get metadata for a worktree from .grove/metadata/{worktree}/ directory."""
     current_path = Path.cwd()
@@ -427,6 +455,8 @@ class GroveApp(App):
     def on_mount(self) -> None:
         self.query_one(Sidebar).border_title = "Worktrees"
         self.theme = "tokyo-night"
+        # Clean up orphaned worktrees on startup
+        self.cleanup_orphaned_worktrees()
 
     def action_new_worktree(self) -> None:
         """An action to create a new worktree."""
@@ -828,6 +858,107 @@ class GroveApp(App):
         """Update metadata display when selected worktree changes."""
         metadata_display = self.query_one("#body", MetadataDisplay)
         metadata_display.update_content(selected_worktree)
+
+    def cleanup_orphaned_worktrees(self) -> None:
+        """Clean up worktrees that have published PRs but no remote branch."""
+        current_path = Path.cwd()
+        bare_parent: Path | None = None
+
+        # Find where the .bare directory is located
+        if (current_path / ".bare").is_dir():
+            bare_parent = current_path
+        elif (current_path.parent / ".bare").is_dir():
+            bare_parent = current_path.parent
+
+        if bare_parent is None:
+            return
+
+        # Get worktrees with published PRs
+        pr_worktrees = get_worktree_pr_status()
+        if not pr_worktrees:
+            return
+
+        orphaned_worktrees: list[str] = []
+
+        for worktree_name in pr_worktrees:
+            worktree_path = bare_parent / worktree_name
+            if not worktree_path.exists():
+                continue
+
+            # Check if the remote branch still exists
+            if not check_remote_branch_exists(worktree_path):
+                orphaned_worktrees.append(worktree_name)
+
+        if not orphaned_worktrees:
+            return
+
+        # Clean up orphaned worktrees
+        for worktree_name in orphaned_worktrees:
+            # Extract prefix from worktree name
+            prefix = ""
+            if "/" in worktree_name:
+                prefix = worktree_name.split("/")[0] + "/"
+
+            # Set environment variable and run worktree-manager remove command
+            env = os.environ.copy()
+            env["WORKTREE_PREFIX"] = prefix
+
+            try:
+                # Run worktree-manager remove command
+                result = subprocess.run(
+                    ["worktree-manager", "remove", worktree_name],
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if result.returncode == 0:
+                    # Check if there's a tmux session with the same name and kill it
+                    try:
+                        session_check = subprocess.run(
+                            ['tmux', 'has-session', '-t', worktree_name],
+                            capture_output=True,
+                            text=True,
+                            check=False
+                        )
+
+                        if session_check.returncode == 0:
+                            subprocess.run(
+                                ['tmux', 'kill-session', '-t', worktree_name],
+                                capture_output=True,
+                                text=True,
+                                timeout=10
+                            )
+                    except (FileNotFoundError, subprocess.SubprocessError):
+                        pass
+
+                    self.notify(f"Auto-cleaned orphaned worktree: {worktree_name}", severity="information")
+                else:
+                    self.notify(f"Failed to auto-clean worktree {worktree_name}: {result.stderr}", severity="warning")
+
+            except subprocess.TimeoutExpired:
+                self.notify(f"Timeout cleaning worktree: {worktree_name}", severity="warning")
+            except FileNotFoundError:
+                self.notify("worktree-manager command not found", severity="warning")
+            except Exception as e:
+                self.notify(f"Error cleaning worktree {worktree_name}: {str(e)}", severity="warning")
+
+        # Refresh the sidebar after cleanup
+        if orphaned_worktrees:
+            sidebar = self.query_one("#sidebar", Sidebar)
+            sidebar.clear()
+            directories = get_worktree_directories()
+            sessions = get_active_tmux_sessions()
+            pr_worktrees = get_worktree_pr_status()
+
+            if directories:
+                for directory in directories:
+                    icon = "●" if directory in sessions else "○"
+                    pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
+                    sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
+            else:
+                sidebar.append(ListItem(Label("No directories found")))
 
 
 def main() -> None:
