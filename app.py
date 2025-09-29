@@ -756,7 +756,8 @@ class GroveApp(App):
             # Extract worktree name from label text (remove icon and PR indicator)
             # Format is: "{icon}{pr_indicator} {directory}"
             # where icon is "●" or "○" and pr_indicator is " [bold]PR[/bold]" or ""
-            label_text = str(label.content)
+            # In Textual, Label stores its text in the renderable attribute
+            label_text = label.renderable if isinstance(label.renderable, str) else str(label.renderable)
 
             # Remove the icon (first character) and any PR indicator
             if " " in label_text:
@@ -829,10 +830,15 @@ class GroveApp(App):
         metadata_display.update_content(selected_worktree)
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Main entry point for Grove application."""
     if not is_bare_git_repository():
         print("Error: Grove must be run from a bare git repository (directory containing '.bare' subdirectory)", file=sys.stderr)
         sys.exit(1)
 
     app = GroveApp()
     app.run()
+
+
+if __name__ == "__main__":
+    main()
