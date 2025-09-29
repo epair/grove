@@ -746,11 +746,75 @@ class GroveApp(App):
         """Handle when a worktree is highlighted in the sidebar."""
         if message.item and message.item.query(Label):
             label = message.item.query_one(Label)
-            # Extract worktree name from label text (remove icon prefix)
+            # Extract worktree name from label text (remove icon and PR indicator)
+            # Format is: "{icon}{pr_indicator} {directory}"
+            # where icon is "●" or "○" and pr_indicator is " [bold]PR[/bold]" or ""
             label_text = str(label.content)
+
+            # Remove the icon (first character) and any PR indicator
             if " " in label_text:
-                worktree_name = label_text.split(" ", 1)[1]
+                # Find the last space, everything after it is the worktree name
+                parts = label_text.split()
+                # The worktree name is always the last part after all prefixes
+                worktree_name = parts[-1] if parts else ""
+                # Handle case where worktree name might have spaces (need to get everything after prefixes)
+                # Look for the pattern: icon, optional PR indicator, then the actual name
+                if "[bold]PR[/bold]" in label_text:
+                    # If there's a PR indicator, split after it
+                    after_pr = label_text.split("[/bold]")[-1].strip()
+                    worktree_name = after_pr
+                else:
+                    # No PR indicator, just split after the icon
+                    worktree_name = label_text.split(" ", 1)[1] if " " in label_text else ""
+
                 self.selected_worktree = worktree_name
+
+    def on_list_view_selected(self, message: ListView.Selected) -> None:
+        """Handle when a worktree is selected (Enter pressed) in the sidebar."""
+        if not self.selected_worktree:
+            return
+
+        # Find the worktree root directory
+        current_path = Path.cwd()
+        worktree_root = None
+
+        if (current_path / ".bare").is_dir():
+            worktree_root = current_path
+        elif (current_path.parent / ".bare").is_dir():
+            worktree_root = current_path.parent
+
+        if worktree_root is None:
+            self.notify("Could not find worktree root directory", severity="error")
+            return
+
+        # Construct the full path to the worktree
+        worktree_path = worktree_root / self.selected_worktree
+
+        if not worktree_path.exists():
+            self.notify(f"Worktree directory not found: {self.selected_worktree}", severity="error")
+            return
+
+        try:
+            # Run tmux-sessionizer command to switch to the session
+            result = subprocess.run(
+                ["tmux-sessionizer", str(worktree_path)],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                # Success - exit the application
+                self.exit()
+            else:
+                self.notify(f"Failed to switch to tmux session: {result.stderr}", severity="error")
+
+        except subprocess.TimeoutExpired:
+            self.notify("Command timed out", severity="error")
+        except FileNotFoundError:
+            self.notify("tmux-sessionizer command not found", severity="error")
+        except Exception as e:
+            self.notify(f"Unexpected error: {str(e)}", severity="error")
 
     def watch_selected_worktree(self, selected_worktree: str) -> None:
         """Update metadata display when selected worktree changes."""
