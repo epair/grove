@@ -260,13 +260,52 @@ class WorktreeFormScreen(ModalScreen[dict[str, str] | None]):
         """Cancel the form and return to main app."""
         self.dismiss(None)
 
+class ConfirmDeleteScreen(ModalScreen[bool]):
+    """A modal screen for confirming worktree deletion."""
+
+    BINDINGS = [
+        ("escape", "cancel", "Cancel"),
+        ("y", "confirm", "Yes"),
+        ("n", "cancel", "No")
+    ]
+
+    def __init__(self, worktree_name: str) -> None:
+        super().__init__()
+        self.worktree_name = worktree_name
+
+    def compose(self) -> ComposeResult:
+        """Create the confirmation dialog layout."""
+        with Vertical(id="delete_dialog"):
+            yield Label("Delete Worktree", id="delete_title")
+            yield Label(f"Are you sure you want to delete '{self.worktree_name}'?", id="delete_message")
+            yield Label("This action cannot be undone.", id="delete_warning")
+            with Center():
+                yield Button("Yes (y)", variant="error", id="yes_button")
+                yield Button("No (n)", variant="default", id="no_button")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events."""
+        if event.button.id == "yes_button":
+            self.dismiss(True)
+        elif event.button.id == "no_button":
+            self.dismiss(False)
+
+    def action_confirm(self) -> None:
+        """Confirm deletion."""
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        """Cancel deletion."""
+        self.dismiss(False)
+
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
 
     CSS_PATH = "app.tcss"
     BINDINGS = [
-        ("d", "toggle_dark", "Toggle dark mode"),
-        ("n", "new_worktree", "New worktree")
+        ("ctrl+d", "toggle_dark", "Toggle dark mode"),
+        ("n", "new_worktree", "New worktree"),
+        ("d", "delete_worktree", "Delete worktree")
     ]
 
     selected_worktree = reactive("")
@@ -286,6 +325,14 @@ class GroveApp(App):
     def action_new_worktree(self) -> None:
         """An action to create a new worktree."""
         self.push_screen(WorktreeFormScreen(), self.handle_worktree_creation)
+
+    def action_delete_worktree(self) -> None:
+        """An action to delete the selected worktree."""
+        if not self.selected_worktree:
+            self.notify("No worktree selected", severity="warning")
+            return
+
+        self.push_screen(ConfirmDeleteScreen(self.selected_worktree), self.handle_worktree_deletion)
 
     def handle_worktree_creation(self, form_data: dict[str, str] | None) -> None:
         """Handle the result from the worktree creation form."""
@@ -343,6 +390,93 @@ class GroveApp(App):
                 self.exit()
             else:
                 self.notify(f"Worktree created but failed to start tmux session: {sessionizer_result.stderr}", severity="warning")
+
+        except subprocess.TimeoutExpired:
+            self.notify("Command timed out", severity="error")
+        except FileNotFoundError as e:
+            self.notify(f"Command not found: {e.filename}", severity="error")
+        except Exception as e:
+            self.notify(f"Unexpected error: {str(e)}", severity="error")
+
+    def handle_worktree_deletion(self, confirmed: bool | None) -> None:
+        """Handle the result from the worktree deletion confirmation."""
+        if confirmed is None or not confirmed:
+            return  # User cancelled
+
+        worktree_name = self.selected_worktree
+        if not worktree_name:
+            return
+
+        # Extract prefix from worktree name
+        # Assume prefix format is "prefix/name" -> extract "prefix/"
+        prefix = ""
+        if "/" in worktree_name:
+            prefix = worktree_name.split("/")[0] + "/"
+
+        # Set environment variable and run worktree-manager remove command
+        env = os.environ.copy()
+        env["WORKTREE_PREFIX"] = prefix
+
+        try:
+            # Run worktree-manager remove command
+            result = subprocess.run(
+                ["worktree-manager", "remove", worktree_name],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode != 0:
+                self.notify(f"Failed to delete worktree: {result.stderr}", severity="error")
+                return
+
+            # Check if there's a tmux session with the same name and kill it
+            try:
+                # Check if session exists first
+                session_check = subprocess.run(
+                    ['tmux', 'has-session', '-t', worktree_name],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+
+                if session_check.returncode == 0:
+                    # Session exists, kill it
+                    kill_result = subprocess.run(
+                        ['tmux', 'kill-session', '-t', worktree_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+
+                    if kill_result.returncode == 0:
+                        self.notify(f"Worktree '{worktree_name}' and its tmux session deleted successfully", severity="information")
+                    else:
+                        self.notify(f"Worktree deleted but failed to kill tmux session: {kill_result.stderr}", severity="warning")
+                else:
+                    self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+
+            except (FileNotFoundError, subprocess.SubprocessError):
+                # tmux not available or other error, but worktree was deleted successfully
+                self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+
+            # Refresh the sidebar by recreating it
+            sidebar = self.query_one("#sidebar", Sidebar)
+            sidebar.clear()
+            directories = get_worktree_directories()
+            sessions = get_active_tmux_sessions()
+
+            if directories:
+                for directory in directories:
+                    icon = "●" if directory in sessions else "○"
+                    sidebar.append(ListItem(Label(f"{icon} {directory}")))
+            else:
+                sidebar.append(ListItem(Label("No directories found")))
+
+            # Clear selection if the deleted worktree was selected
+            if self.selected_worktree == worktree_name:
+                self.selected_worktree = ""
 
         except subprocess.TimeoutExpired:
             self.notify("Command timed out", severity="error")

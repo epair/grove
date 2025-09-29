@@ -44,3 +44,40 @@ WorktreeFormScreen {
 Center {
     margin-top: 1;
 }
+
+/* Delete confirmation dialog styling */
+ConfirmDeleteScreen {
+    align: center middle;
+}
+
+#delete_dialog {
+    width: 50;
+    height: 18;
+    padding: 1 2;
+    border: thick $error 80%;
+    background: $surface;
+}
+
+#delete_title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+    color: $error;
+}
+
+#delete_message {
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#delete_warning {
+    text-align: center;
+    margin-bottom: 1;
+    color: $warning;
+    text-style: italic;
+}
+
+#yes_button, #no_button {
+    margin: 0 1;
+    min-width: 10;
+}
