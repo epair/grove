@@ -786,8 +786,9 @@ class GroveApp(App):
             # Extract worktree name from label text (remove icon and PR indicator)
             # Format is: "{icon}{pr_indicator} {directory}"
             # where icon is "●" or "○" and pr_indicator is " [bold]PR[/bold]" or ""
-            # In Textual, Label stores its text in the renderable attribute
-            label_text = label.renderable if isinstance(label.renderable, str) else str(label.renderable)
+            # In Textual 6.0+, Label stores its text in the content property
+            # The content can be various types, so we need to convert it to string
+            label_text = str(label.content)
 
             # Remove the icon (first character) and any PR indicator
             if " " in label_text:

@@ -31,9 +31,7 @@ class TestSidebar:
             directory_labels = []
             for item in list_items:
                 label = item.query_one(Label)
-                # Access the private content attribute since Label doesn't expose it publicly
-                label_text = label._Static__content if hasattr(label, '_Static__content') else str(label)
-                directory_labels.append(label_text)
+                directory_labels.append(str(label.content))
 
             # Verify the expected directories are present with empty circle icons
             # Note: feature-one has a PR indicator because it has .env with WORKTREE_PR_PUBLISHED=true
@@ -114,9 +112,7 @@ class TestSidebar:
             directory_labels = []
             for item in list_items:
                 label = item.query_one(Label)
-                # Access the private content attribute since Label doesn't expose it publicly
-                label_text = label._Static__content if hasattr(label, '_Static__content') else str(label)
-                directory_labels.append(label_text)
+                directory_labels.append(str(label.content))
 
             # Verify feature-one has PR indicator, bugfix-01 doesn't
             expected_directories = ["○ bugfix-01", "○ [bold]PR[/bold] feature-one"]
@@ -142,9 +138,7 @@ class TestSidebar:
             directory_labels = []
             for item in list_items:
                 label = item.query_one(Label)
-                # Access the private content attribute since Label doesn't expose it publicly
-                label_text = label._Static__content if hasattr(label, '_Static__content') else str(label)
-                directory_labels.append(label_text)
+                directory_labels.append(str(label.content))
 
             # Verify bugfix-01 has filled circle, feature-one has PR indicator
             expected_directories = ["● bugfix-01", "○ [bold]PR[/bold] feature-one"]

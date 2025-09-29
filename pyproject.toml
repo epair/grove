@@ -19,7 +19,7 @@ packages = [{include = "*.py"}, {include = "*.tcss"}]
 
 [tool.poetry.dependencies]
 python = "^3.13"
-textual = "^0.86.0"
+textual = "^6.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

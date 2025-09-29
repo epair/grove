@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import patch, MagicMock
 
 import pytest
-from textual.widgets import Label, Button
+from textual.widgets import Label, Button, ListView
 
 from app import GroveApp, ConfirmDeleteScreen
 
@@ -32,21 +32,15 @@ class TestWorktreeDeletion:
 
             # Verify title
             title = screen.query_one("#delete_title", Label)
-            # Access the private content attribute since Label doesn't expose it publicly
-            title_text = title._Static__content if hasattr(title, '_Static__content') else str(title)
-            assert title_text == "Delete Worktree"
+            assert str(title.content) == "Delete Worktree"
 
             # Verify message contains worktree name
             message = screen.query_one("#delete_message", Label)
-            # Access the private content attribute since Label doesn't expose it publicly
-            message_text = message._Static__content if hasattr(message, '_Static__content') else str(message)
-            assert worktree_name in message_text
+            assert worktree_name in str(message.content)
 
             # Verify warning message
             warning = screen.query_one("#delete_warning", Label)
-            # Access the private content attribute since Label doesn't expose it publicly
-            warning_text = warning._Static__content if hasattr(warning, '_Static__content') else str(warning)
-            assert "cannot be undone" in warning_text
+            assert "cannot be undone" in str(warning.content)
 
             # Verify buttons are present
             yes_button = screen.query_one("#yes_button", Button)
@@ -72,7 +66,7 @@ class TestWorktreeDeletion:
             assert isinstance(app.screen, ConfirmDeleteScreen)
 
             # Mock sidebar operations
-            sidebar = app.query_one("#sidebar")
+            sidebar = app.query_one("#sidebar", ListView)
             sidebar.clear = MagicMock()
             sidebar.append = MagicMock()
 
@@ -123,7 +117,7 @@ class TestWorktreeDeletion:
             assert isinstance(app.screen, ConfirmDeleteScreen)
 
             # Mock sidebar operations
-            sidebar = app.query_one("#sidebar")
+            sidebar = app.query_one("#sidebar", ListView)
             sidebar.clear = MagicMock()
             sidebar.append = MagicMock()
 
@@ -273,7 +267,7 @@ class TestWorktreeDeletion:
             app.notify = MagicMock(side_effect=mock_notify)
 
             # Mock sidebar operations
-            sidebar = app.query_one("#sidebar")
+            sidebar = app.query_one("#sidebar", ListView)
             sidebar.clear = MagicMock()
             sidebar.append = MagicMock()
 
@@ -344,7 +338,7 @@ class TestWorktreeDeletion:
             app.notify = MagicMock(side_effect=mock_notify)
 
             # Mock sidebar operations
-            sidebar = app.query_one("#sidebar")
+            sidebar = app.query_one("#sidebar", ListView)
             sidebar.clear = MagicMock()
             sidebar.append = MagicMock()
 
@@ -452,7 +446,7 @@ class TestWorktreeDeletion:
             app.notify = MagicMock(side_effect=mock_notify)
 
             # Mock sidebar operations
-            sidebar = app.query_one("#sidebar")
+            sidebar = app.query_one("#sidebar", ListView)
             sidebar.clear = MagicMock()
             sidebar.append = MagicMock()
 
@@ -501,7 +495,7 @@ class TestWorktreeDeletion:
             app.notify = MagicMock(side_effect=mock_notify)
 
             # Mock sidebar operations
-            sidebar = app.query_one("#sidebar")
+            sidebar = app.query_one("#sidebar", ListView)
             sidebar.clear = MagicMock()
             sidebar.append = MagicMock()
 

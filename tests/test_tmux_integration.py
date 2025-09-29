@@ -70,9 +70,7 @@ class TestTmuxIntegration:
             directory_labels = []
             for item in list_items:
                 label = item.query_one(Label)
-                # Access the private content attribute since Label doesn't expose it publicly
-                label_text = label._Static__content if hasattr(label, '_Static__content') else str(label)
-                directory_labels.append(label_text)
+                directory_labels.append(str(label.content))
 
             # Verify feature-one has filled circle and PR indicator, bugfix-01 has empty circle
             expected_directories = ["○ bugfix-01", "● [bold]PR[/bold] feature-one"]
