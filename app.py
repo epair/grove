@@ -8,8 +8,14 @@ from textual.widgets import Footer, Static, ListView, ListItem, Label, Markdown,
 from textual.containers import Center, Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.reactive import reactive
+from textual.binding import Binding
 
 class Sidebar(ListView):
+    BINDINGS = [
+        Binding("j", "cursor_down", "Move down", show=False),
+        Binding("k", "cursor_up", "Move up", show=False),
+    ]
+
     def compose(self) -> ComposeResult:
         directories = get_worktree_directories()
         sessions = get_active_tmux_sessions()
@@ -404,6 +410,7 @@ class GroveApp(App):
 
     CSS_PATH = "app.tcss"
     BINDINGS = [
+        ("q", "quit", "Quit"),
         ("n", "new_worktree", "New worktree"),
         ("d", "delete_worktree", "Delete worktree"),
         ("p", "create_pr", "Create PR")
