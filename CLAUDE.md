@@ -6,12 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Grove is a Git Worktree and Tmux Session Manager - a modern terminal interface for managing Git worktrees and their associated tmux sessions in a unified, interactive environment.
 
-#### Key functionality (not implemented yet):
+#### Key functionality:
 
-**Visual worktree browser:** Displays all Git worktrees in a repository with a split-screen layout (1/3 list view, 2/3 details view)
-**Tmux integration:** Shows active tmux session indicators and allows quick navigation to worktree-specific sessions
-**Worktree management:** Create new worktrees (from new or existing branches), delete worktrees, and view worktree status
-**Metadata system:** Maintains worktree-specific documentation (descriptions, PR info, notes) in a .grove/metadata/ directory structure
+**Visual worktree browser:** Displays all Git worktrees in a repository with a split-screen layout (1/3 list view, 2/3 details view) ✅
+**Tmux integration:** Shows active tmux session indicators (● for active, ○ for inactive) in the sidebar ✅
+**Worktree management:** Create new worktrees from modal form, delete worktrees with confirmation dialog ✅
+**Metadata system:** Maintains and displays worktree-specific documentation (descriptions, PR info, notes) in a .grove/metadata/ directory structure as formatted markdown ✅
 **Interactive navigation:** Keyboard-driven interface similar to lazygit/htop for efficient workflow management
 
 The tool essentially bridges the gap between Git worktree management and tmux session organization, making it easier to switch between different branches/features while maintaining separate development environments. It pulls all data dynamically from Git and tmux CLI commands rather than using a database, keeping the system lightweight and in sync with the actual state of your repositories and sessions.
@@ -26,16 +26,21 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 
 ### Key Components
 
-- `GroveApp`: Main Textual app class with dark mode toggle
-- `Sidebar`: ListView widget that displays worktree directories
+- `GroveApp`: Main Textual app class using tokyo-night theme
+- `Sidebar`: ListView widget that displays worktree directories with tmux session indicators
+- `WorktreeFormScreen`: Modal form for creating new worktrees (branch name and path)
+- `ConfirmDeleteScreen`: Modal confirmation dialog for worktree deletion
 - `is_bare_git_repository()`: Validates the environment is a bare git repo
 - `get_worktree_directories()`: Discovers directories at the same level as `.bare`
+- `get_active_tmux_sessions()`: Retrieves active tmux session names
+- `get_worktree_metadata()`: Reads metadata files for a worktree
+- `delete_worktree()`: Removes a worktree using git commands
 
 ## Development Commands
 
 **Run the application:**
 ```bash
-python app.py # should display an error message about not running in a bare repository
+python app.py  # Must be run from a bare git repository directory
 ```
 
 **Syntax check:**
@@ -68,8 +73,11 @@ mypy app.py tests/
 ## Key Behavior
 
 - Application exits with error if not run from a bare git repository
-- Discovers and lists directories at the same level as `.bare` directory
+- Discovers and lists directories at the same level as `.bare` directory with tmux session indicators
 - Excludes hidden directories (starting with `.`) from the sidebar
+- Displays worktree metadata (description, PR info, notes) as formatted markdown in the main body
+- Creates new worktrees via modal form (Ctrl+N)
+- Deletes selected worktree with confirmation (Ctrl+D)
 - Supports repositories with the following directory structure:
 
 repository/
@@ -91,8 +99,8 @@ repository/
 
 ## Theme Colors
 
-- Application is using tokyo-night theme
-- The following variables are available to keep theme color usage consistent:
+- Application uses tokyo-night theme (dark mode removed for consistency)
+- The following Textual CSS variables are available to keep theme color usage consistent:
 $primary	The primary color, can be considered the branding color. Typically used for titles, and backgrounds for strong emphasis.
 $secondary	An alternative branding color, used for similar purposes as $primary, where an app needs to differentiate something from the primary color.
 $foreground	The default text color, which should be legible on $background, $surface, and $panel.
