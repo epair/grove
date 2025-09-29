@@ -13,11 +13,13 @@ class Sidebar(ListView):
     def compose(self) -> ComposeResult:
         directories = get_worktree_directories()
         sessions = get_active_tmux_sessions()
+        pr_worktrees = get_worktree_pr_status()
 
         if directories:
             for directory in directories:
                 icon = "●" if directory in sessions else "○"
-                yield ListItem(Label(f"{icon} {directory}"))
+                pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
+                yield ListItem(Label(f"{icon}{pr_indicator} {directory}"))
         else:
             yield ListItem(Label("No directories found"))
 
@@ -71,6 +73,39 @@ def get_active_tmux_sessions() -> set[str]:
     except (FileNotFoundError, subprocess.SubprocessError):
         pass
     return set()
+
+def get_worktree_pr_status() -> set[str]:
+    """Get names of worktrees that have a PR published."""
+    current_path = Path.cwd()
+    bare_parent: Path | None = None
+
+    # Find where the .bare directory is located
+    if (current_path / ".bare").is_dir():
+        bare_parent = current_path
+    elif (current_path.parent / ".bare").is_dir():
+        bare_parent = current_path.parent
+
+    if bare_parent is None:
+        return set()
+
+    # Check each worktree for .env file with WORKTREE_PR_PUBLISHED=true
+    pr_worktrees: set[str] = set()
+    directories = get_worktree_directories()
+
+    for directory in directories:
+        env_file = bare_parent / directory / ".env"
+        if env_file.exists():
+            try:
+                content = env_file.read_text()
+                # Check if WORKTREE_PR_PUBLISHED=true is in the file
+                for line in content.strip().split('\n'):
+                    if line.strip() == 'WORKTREE_PR_PUBLISHED=true':
+                        pr_worktrees.add(directory)
+                        break
+            except (IOError, OSError):
+                pass
+
+    return pr_worktrees
 
 def get_worktree_metadata(worktree_name: str) -> dict[str, str]:
     """Get metadata for a worktree from .grove/metadata/{worktree}/ directory."""
@@ -383,6 +418,7 @@ class GroveApp(App):
         yield Footer()
     
     def on_mount(self) -> None:
+        self.query_one(Sidebar).border_title = "Worktrees"
         self.theme = "tokyo-night"
 
     def action_new_worktree(self) -> None:
@@ -537,11 +573,13 @@ class GroveApp(App):
             sidebar.clear()
             directories = get_worktree_directories()
             sessions = get_active_tmux_sessions()
+            pr_worktrees = get_worktree_pr_status()
 
             if directories:
                 for directory in directories:
                     icon = "●" if directory in sessions else "○"
-                    sidebar.append(ListItem(Label(f"{icon} {directory}")))
+                    pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
+                    sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
             else:
                 sidebar.append(ListItem(Label("No directories found")))
 

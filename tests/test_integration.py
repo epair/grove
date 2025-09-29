@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Generator
 from unittest.mock import patch, MagicMock
 from textual.widgets import ListView, ListItem, Label, Input, Button, Checkbox
-from app import GroveApp, WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen, get_worktree_directories, is_bare_git_repository, get_active_tmux_sessions, get_worktree_metadata, get_worktree_git_info, MetadataDisplay
+from app import GroveApp, WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen, get_worktree_directories, is_bare_git_repository, get_active_tmux_sessions, get_worktree_metadata, get_worktree_git_info, get_worktree_pr_status, MetadataDisplay
 
 
 class TestGroveIntegration:
@@ -61,7 +61,8 @@ class TestGroveIntegration:
                 directory_labels.append(str(label.content))
 
             # Verify the expected directories are present with empty circle icons
-            expected_directories = ["○ bugfix-01", "○ feature-one"]
+            # Note: feature-one has a PR indicator because it has .env with WORKTREE_PR_PUBLISHED=true
+            expected_directories = ["○ bugfix-01", "○ [bold]PR[/bold] feature-one"]
             assert directory_labels == expected_directories
 
     async def test_grove_app_starts_successfully(self, change_to_example_repo: Path) -> None:
@@ -161,8 +162,80 @@ class TestGroveIntegration:
                 label = item.query_one(Label)
                 directory_labels.append(str(label.content))
 
-            # Verify feature-one has filled circle, bugfix-01 has empty circle
-            expected_directories = ["○ bugfix-01", "● feature-one"]
+            # Verify feature-one has filled circle and PR indicator, bugfix-01 has empty circle
+            expected_directories = ["○ bugfix-01", "● [bold]PR[/bold] feature-one"]
+            assert directory_labels == expected_directories
+
+    def test_get_worktree_pr_status(self, change_to_example_repo: Path) -> None:
+        """Test that get_worktree_pr_status correctly identifies worktrees with PRs."""
+        pr_worktrees = get_worktree_pr_status()
+
+        # feature-one has a .env file with WORKTREE_PR_PUBLISHED=true
+        assert 'feature-one' in pr_worktrees
+        # bugfix-01 doesn't have a .env file, so no PR
+        assert 'bugfix-01' not in pr_worktrees
+
+    def test_get_worktree_pr_status_outside_bare_repo(self, tmp_path: Path) -> None:
+        """Test that get_worktree_pr_status returns empty set when not in a bare repo."""
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
+
+        try:
+            pr_worktrees = get_worktree_pr_status()
+            assert pr_worktrees == set()
+        finally:
+            os.chdir(original_cwd)
+
+    @patch('app.get_active_tmux_sessions')
+    @patch('app.get_worktree_pr_status')
+    async def test_sidebar_with_pr_indicators(self, mock_pr_status: Any, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that sidebar shows PR indicators for worktrees with published PRs."""
+        # Mock no tmux sessions but feature-one has a PR
+        mock_sessions.return_value = set()
+        mock_pr_status.return_value = {'feature-one'}
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            # Get the sidebar widget
+            sidebar = app.query_one("#sidebar", ListView)
+
+            # Get all list items in the sidebar
+            list_items = sidebar.query(ListItem)
+
+            # Extract the text content from each list item
+            directory_labels = []
+            for item in list_items:
+                label = item.query_one(Label)
+                directory_labels.append(str(label.content))
+
+            # Verify feature-one has PR indicator, bugfix-01 doesn't
+            expected_directories = ["○ bugfix-01", "○ [bold]PR[/bold] feature-one"]
+            assert directory_labels == expected_directories
+
+    @patch('app.get_active_tmux_sessions')
+    @patch('app.get_worktree_pr_status')
+    async def test_sidebar_with_tmux_and_pr_indicators(self, mock_pr_status: Any, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that sidebar shows both tmux and PR indicators correctly."""
+        # Mock tmux session for bugfix-01 and PR for feature-one
+        mock_sessions.return_value = {'bugfix-01'}
+        mock_pr_status.return_value = {'feature-one'}
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            # Get the sidebar widget
+            sidebar = app.query_one("#sidebar", ListView)
+
+            # Get all list items in the sidebar
+            list_items = sidebar.query(ListItem)
+
+            # Extract the text content from each list item
+            directory_labels = []
+            for item in list_items:
+                label = item.query_one(Label)
+                directory_labels.append(str(label.content))
+
+            # Verify bugfix-01 has filled circle, feature-one has PR indicator
+            expected_directories = ["● bugfix-01", "○ [bold]PR[/bold] feature-one"]
             assert directory_labels == expected_directories
 
     def test_get_worktree_metadata_with_content(self, change_to_example_repo: Path) -> None:
