@@ -81,3 +81,46 @@ ConfirmDeleteScreen {
     margin: 0 1;
     min-width: 10;
 }
+
+/* PR form modal styling */
+PRFormScreen {
+    align: center middle;
+}
+
+#pr_dialog {
+    width: 60;
+    height: 28;
+    padding: 1 2;
+    border: thick $primary 80%;
+    background: $surface;
+}
+
+#pr_title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#pr_title_input {
+    margin-bottom: 1;
+}
+
+#reviewers_label {
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#reviewers_container {
+    height: 8;
+    margin-bottom: 1;
+}
+
+.reviewer_column {
+    width: 1fr;
+    padding: 0 1;
+}
+
+#create_pr_button, #cancel_pr_button {
+    margin: 0 1;
+    min-width: 12;
+}

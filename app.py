@@ -4,8 +4,8 @@ import sys
 import time
 from pathlib import Path
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Static, ListView, ListItem, Label, Markdown, Input, Button
-from textual.containers import Center, Vertical
+from textual.widgets import Footer, Static, ListView, ListItem, Label, Markdown, Input, Button, Checkbox
+from textual.containers import Center, Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.reactive import reactive
 
@@ -298,13 +298,80 @@ class ConfirmDeleteScreen(ModalScreen[bool]):
         """Cancel deletion."""
         self.dismiss(False)
 
+class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
+    """A modal screen for creating a pull request."""
+
+    BINDINGS = [("escape", "cancel", "Cancel")]
+
+    def compose(self) -> ComposeResult:
+        """Create the PR form layout."""
+        with Vertical(id="pr_dialog"):
+            yield Label("Create Pull Request", id="pr_title")
+            yield Label("PR Title:")
+            yield Input(placeholder="Enter PR title", id="pr_title_input")
+            yield Label("Select Reviewers:", id="reviewers_label")
+
+            # Two-column layout for reviewers
+            with Horizontal(id="reviewers_container"):
+                with Vertical(classes="reviewer_column"):
+                    yield Checkbox("njm", value=True, id="checkbox_njm")
+                    yield Checkbox("swlkr", id="checkbox_swlkr")
+                    yield Checkbox("daviswahl", id="checkbox_daviswahl")
+                with Vertical(classes="reviewer_column"):
+                    yield Checkbox("BryceFrye", id="checkbox_BryceFrye")
+                    yield Checkbox("neddenriep", id="checkbox_neddenriep")
+                    yield Checkbox("gorilla076", id="checkbox_gorilla076")
+
+            with Center():
+                yield Button("Create PR", variant="primary", id="create_pr_button")
+                yield Button("Cancel", variant="default", id="cancel_pr_button")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events."""
+        if event.button.id == "create_pr_button":
+            title = self.query_one("#pr_title_input", Input).value
+
+            if not title.strip():
+                return  # Don't submit if title is empty
+
+            # Collect selected reviewers
+            reviewers = []
+            for reviewer in ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]:
+                checkbox = self.query_one(f"#checkbox_{reviewer}", Checkbox)
+                if checkbox.value:
+                    reviewers.append(reviewer)
+
+            self.dismiss({"title": title, "reviewers": reviewers})
+        elif event.button.id == "cancel_pr_button":
+            self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in input fields."""
+        if event.input.id == "pr_title_input":
+            title = event.input.value
+
+            if title.strip():
+                # Collect selected reviewers
+                reviewers = []
+                for reviewer in ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]:
+                    checkbox = self.query_one(f"#checkbox_{reviewer}", Checkbox)
+                    if checkbox.value:
+                        reviewers.append(reviewer)
+
+                self.dismiss({"title": title, "reviewers": reviewers})
+
+    def action_cancel(self) -> None:
+        """Cancel the form and return to main app."""
+        self.dismiss(None)
+
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
 
     CSS_PATH = "app.tcss"
     BINDINGS = [
         ("n", "new_worktree", "New worktree"),
-        ("d", "delete_worktree", "Delete worktree")
+        ("d", "delete_worktree", "Delete worktree"),
+        ("p", "create_pr", "Create PR")
     ]
 
     selected_worktree = reactive("")
@@ -329,6 +396,14 @@ class GroveApp(App):
             return
 
         self.push_screen(ConfirmDeleteScreen(self.selected_worktree), self.handle_worktree_deletion)
+
+    def action_create_pr(self) -> None:
+        """An action to create a pull request for the selected worktree."""
+        if not self.selected_worktree:
+            self.notify("No worktree selected", severity="warning")
+            return
+
+        self.push_screen(PRFormScreen(), self.handle_pr_submission)
 
     def handle_worktree_creation(self, form_data: dict[str, str] | None) -> None:
         """Handle the result from the worktree creation form."""
@@ -478,6 +553,154 @@ class GroveApp(App):
             self.notify("Command timed out", severity="error")
         except FileNotFoundError as e:
             self.notify(f"Command not found: {e.filename}", severity="error")
+        except Exception as e:
+            self.notify(f"Unexpected error: {str(e)}", severity="error")
+
+    def handle_pr_submission(self, form_data: dict[str, str | list[str]] | None) -> None:
+        """Handle the result from the PR submission form."""
+        if form_data is None:
+            return  # User cancelled
+
+        pr_title = str(form_data["title"])
+        reviewers_raw = form_data.get("reviewers", [])
+        reviewers: list[str] = reviewers_raw if isinstance(reviewers_raw, list) else []
+
+        if not self.selected_worktree:
+            self.notify("No worktree selected", severity="error")
+            return
+
+        # Find the worktree root directory
+        current_path = Path.cwd()
+        worktree_root = None
+
+        if (current_path / ".bare").is_dir():
+            worktree_root = current_path
+        elif (current_path.parent / ".bare").is_dir():
+            worktree_root = current_path.parent
+
+        if worktree_root is None:
+            self.notify("Could not find worktree root directory", severity="error")
+            return
+
+        worktree_path = worktree_root / self.selected_worktree
+        if not worktree_path.exists():
+            self.notify(f"Worktree directory not found: {self.selected_worktree}", severity="error")
+            return
+
+        try:
+            # Get the current branch name
+            branch_result = subprocess.run(
+                ['git', '-C', str(worktree_path), 'branch', '--show-current'],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+
+            if branch_result.returncode != 0:
+                self.notify("Failed to get current branch name", severity="error")
+                return
+
+            branch_name = branch_result.stdout.strip()
+            if not branch_name:
+                self.notify("No current branch found", severity="error")
+                return
+
+            # Push the branch to origin
+            push_result = subprocess.run(
+                ['git', '-C', str(worktree_path), 'push', '-u', 'origin', branch_name],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if push_result.returncode != 0:
+                self.notify(f"Failed to push branch: {push_result.stderr}", severity="error")
+                return
+
+            # Prepare the gh pr create command
+            pr_body_file = worktree_root / ".grove" / "metadata" / self.selected_worktree / "pr.md"
+
+            gh_command: list[str] = ['gh', '-R', '.', 'pr', 'create', '--title', pr_title]
+
+            # Add body file if it exists
+            if pr_body_file.exists():
+                gh_command.extend(['--body-file', str(pr_body_file)])
+            else:
+                gh_command.extend(['--body', ''])
+
+            # Add reviewers if any selected
+            if reviewers:
+                gh_command.extend(['--reviewer', ','.join(reviewers)])
+
+            # Run gh pr create from the worktree directory
+            pr_result = subprocess.run(
+                gh_command,
+                cwd=str(worktree_path),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if pr_result.returncode != 0:
+                self.notify(f"Failed to create PR: {pr_result.stderr}", severity="error")
+                return
+
+            # Extract PR URL from output (usually the last line)
+            pr_output = pr_result.stdout.strip()
+            pr_url = None
+
+            # gh pr create outputs the URL on the last line
+            if pr_output:
+                lines = pr_output.split('\n')
+                for line in reversed(lines):
+                    if 'github.com' in line and '/pull/' in line:
+                        pr_url = line.strip()
+                        break
+
+            # Write WORKTREE_PR_PUBLISHED=true to .env file in worktree dir
+            env_file_path = worktree_path / ".env"
+            try:
+                # Read existing .env content if it exists
+                existing_content = ""
+                if env_file_path.exists():
+                    existing_content = env_file_path.read_text()
+                    # Check if WORKTREE_PR_PUBLISHED already exists
+                    lines = existing_content.strip().split('\n')
+                    updated = False
+                    for i, line in enumerate(lines):
+                        if line.startswith('WORKTREE_PR_PUBLISHED='):
+                            lines[i] = 'WORKTREE_PR_PUBLISHED=true'
+                            updated = True
+                            break
+
+                    if not updated:
+                        lines.append('WORKTREE_PR_PUBLISHED=true')
+
+                    new_content = '\n'.join(lines) + '\n'
+                else:
+                    new_content = 'WORKTREE_PR_PUBLISHED=true\n'
+
+                env_file_path.write_text(new_content)
+            except Exception as e:
+                self.notify(f"Warning: Could not write to .env file: {str(e)}", severity="warning")
+
+            # Open the PR URL if found
+            if pr_url:
+                try:
+                    # Use the open command on macOS
+                    subprocess.run(['open', pr_url], check=False)
+                except Exception:
+                    self.notify(f"PR created: {pr_url}", severity="information")
+            else:
+                self.notify("Pull request created successfully", severity="information")
+
+            # Exit the app
+            self.exit()
+
+        except subprocess.TimeoutExpired:
+            self.notify("Command timed out", severity="error")
+        except FileNotFoundError as e:
+            self.notify(f"Command not found: {e.filename}. Make sure 'gh' CLI is installed.", severity="error")
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
