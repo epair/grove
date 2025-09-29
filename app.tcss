@@ -2,13 +2,13 @@
     dock: left;
     width: 35;
     height: 99%;
-    border: solid #7aa2f7;
+    border: solid $secondary;
 }
 
 #body {
     padding: 1;
     margin: 1;
-    border: solid #9ece6a;
+    border: solid $secondary;
     height: 99%;
 }
 

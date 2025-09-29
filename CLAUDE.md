@@ -70,7 +70,6 @@ mypy app.py tests/
 - Application exits with error if not run from a bare git repository
 - Discovers and lists directories at the same level as `.bare` directory
 - Excludes hidden directories (starting with `.`) from the sidebar
-- Supports dark/light theme toggle with 'd' key
 - Supports repositories with the following directory structure:
 
 repository/
@@ -89,6 +88,22 @@ repository/
 │           └── notes.md
 ├── feature-one/
 └── bugfix-01/
+
+## Theme Colors
+
+- Application is using tokyo-night theme
+- The following variables are available to keep theme color usage consistent:
+$primary	The primary color, can be considered the branding color. Typically used for titles, and backgrounds for strong emphasis.
+$secondary	An alternative branding color, used for similar purposes as $primary, where an app needs to differentiate something from the primary color.
+$foreground	The default text color, which should be legible on $background, $surface, and $panel.
+$background	A color used for the background, where there is no content. Used as the default background color for screens.
+$surface	The default background color of widgets, typically sitting on top of $background.
+$panel	A color used to differentiate a part of the UI form the main content. Used sparingly in Textual itself.
+$boost	A color with alpha that can be used to create layers on a background.
+$warning	Indicates a warning. Typically used as a background color. $text-warning can be used for foreground.
+$error	Indicates an error. Typically used as a background color. $text-error can be used for foreground.
+$success	Used to indicate success. Typically used as a background color. $text-success can be used for foreground.
+$accent	Used sparingly to draw attention. Typically contrasts with $primary and $secondary.
 
 ## Testing Infrastructure
 

@@ -303,7 +303,6 @@ class GroveApp(App):
 
     CSS_PATH = "app.tcss"
     BINDINGS = [
-        ("ctrl+d", "toggle_dark", "Toggle dark mode"),
         ("n", "new_worktree", "New worktree"),
         ("d", "delete_worktree", "Delete worktree")
     ]
@@ -315,12 +314,9 @@ class GroveApp(App):
         yield Sidebar(id='sidebar')
         yield MetadataDisplay("Select a worktree to view its metadata.", id="body")
         yield Footer()
-
-    def action_toggle_dark(self) -> None:
-        """An action to toggle dark mode."""
-        self.theme = (
-            "textual-dark" if self.theme == "textual-light" else "textual-light"
-        )
+    
+    def on_mount(self) -> None:
+        self.theme = "tokyo-night"
 
     def action_new_worktree(self) -> None:
         """An action to create a new worktree."""
