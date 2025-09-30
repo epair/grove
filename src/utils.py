@@ -20,8 +20,8 @@ def is_bare_git_repository() -> bool:
 
     return False
 
-def get_worktree_directories() -> list[str]:
-    """Get directories at the same level as .bare directory, excluding hidden directories."""
+def get_bare_parent() -> Path | None:
+    """Get bare parent directory containing .bare subdirectory."""
     current_path = Path.cwd()
     bare_parent: Path | None = None
 
@@ -30,6 +30,12 @@ def get_worktree_directories() -> list[str]:
         bare_parent = current_path
     elif (current_path.parent / ".bare").is_dir():
         bare_parent = current_path.parent
+
+    return bare_parent
+
+def get_worktree_directories() -> list[str]:
+    """Get directories at the same level as .bare directory, excluding hidden directories."""
+    bare_parent = get_bare_parent()
 
     if bare_parent is None:
         return []
@@ -59,14 +65,7 @@ def get_active_tmux_sessions() -> set[str]:
 
 def get_worktree_pr_status() -> set[str]:
     """Get names of worktrees that have a PR published."""
-    current_path = Path.cwd()
-    bare_parent: Path | None = None
-
-    # Find where the .bare directory is located
-    if (current_path / ".bare").is_dir():
-        bare_parent = current_path
-    elif (current_path.parent / ".bare").is_dir():
-        bare_parent = current_path.parent
+    bare_parent = get_bare_parent()
 
     if bare_parent is None:
         return set()
@@ -116,14 +115,7 @@ def check_remote_branch_exists(worktree_path: Path) -> bool:
 
 def get_worktree_metadata(worktree_name: str) -> dict[str, str]:
     """Get metadata for a worktree from .grove/metadata/{worktree}/ directory."""
-    current_path = Path.cwd()
-    bare_parent: Path | None = None
-
-    # Find where the .bare directory is located
-    if (current_path / ".bare").is_dir():
-        bare_parent = current_path
-    elif (current_path.parent / ".bare").is_dir():
-        bare_parent = current_path.parent
+    bare_parent = get_bare_parent()
 
     if bare_parent is None:
         return {}
@@ -147,14 +139,7 @@ def get_worktree_metadata(worktree_name: str) -> dict[str, str]:
 
 def get_worktree_git_info(worktree_name: str) -> dict[str, str]:
     """Get git information for a worktree (last commit message, date, committer)."""
-    current_path = Path.cwd()
-    bare_parent: Path | None = None
-
-    # Find where the .bare directory is located
-    if (current_path / ".bare").is_dir():
-        bare_parent = current_path
-    elif (current_path.parent / ".bare").is_dir():
-        bare_parent = current_path.parent
+    bare_parent = get_bare_parent()
 
     if bare_parent is None:
         return {"commit_message": "N/A", "commit_date": "N/A", "committer": "N/A"}
@@ -190,14 +175,7 @@ def create_worktree_with_branch(name: str, prefix: str) -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, error_message: str)
     """
-    current_path = Path.cwd()
-    bare_parent: Path | None = None
-
-    # Find where the .bare directory is located
-    if (current_path / ".bare").is_dir():
-        bare_parent = current_path
-    elif (current_path.parent / ".bare").is_dir():
-        bare_parent = current_path.parent
+    bare_parent = get_bare_parent()
 
     if bare_parent is None:
         return False, "Could not find .bare directory"
@@ -265,14 +243,7 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, error_message: str)
     """
-    current_path = Path.cwd()
-    bare_parent: Path | None = None
-
-    # Find where the .bare directory is located
-    if (current_path / ".bare").is_dir():
-        bare_parent = current_path
-    elif (current_path.parent / ".bare").is_dir():
-        bare_parent = current_path.parent
+    bare_parent = get_bare_parent()
 
     if bare_parent is None:
         return False, "Could not find .bare directory"
