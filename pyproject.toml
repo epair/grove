@@ -15,7 +15,7 @@ classifiers = [
     "Topic :: System :: Shells",
     "Topic :: Terminals",
 ]
-packages = [{include = "*.py"}, {include = "*.tcss"}]
+packages = [{include = "src"}, {include = "*.tcss"}]
 
 [tool.poetry.dependencies]
 python = "^3.13"
@@ -27,7 +27,7 @@ mypy = "^1.0.0"
 pytest-asyncio = "^0.23.0"
 
 [tool.poetry.scripts]
-grove = "app:main"
+grove = "src.__main__:main"
 
 [build-system]
 requires = ["poetry-core"]

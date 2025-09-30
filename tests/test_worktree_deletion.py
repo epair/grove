@@ -7,13 +7,13 @@ from unittest.mock import patch, MagicMock
 import pytest
 from textual.widgets import Label, Button, ListView
 
-from app import GroveApp, ConfirmDeleteScreen
+from src import GroveApp, ConfirmDeleteScreen
 
 
 class TestWorktreeDeletion:
     """Tests for worktree deletion feature."""
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_confirm_delete_screen_initial_state(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that ConfirmDeleteScreen displays correct initial content."""
         mock_sessions.return_value = set()
@@ -48,8 +48,8 @@ class TestWorktreeDeletion:
             assert "Yes" in str(yes_button.label)
             assert "No" in str(no_button.label)
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_confirm_delete_screen_yes_button(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that clicking Yes button confirms deletion."""
         mock_sessions.return_value = set()
@@ -77,7 +77,7 @@ class TestWorktreeDeletion:
             # Verify we're back to main screen (deletion was confirmed)
             assert not isinstance(app.screen, ConfirmDeleteScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_confirm_delete_screen_no_button(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that clicking No button cancels deletion."""
         mock_sessions.return_value = set()
@@ -99,8 +99,8 @@ class TestWorktreeDeletion:
             # Verify we're back to main screen (deletion was cancelled)
             assert not isinstance(app.screen, ConfirmDeleteScreen)
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_confirm_delete_screen_y_key(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'y' key confirms deletion."""
         mock_sessions.return_value = set()
@@ -128,7 +128,7 @@ class TestWorktreeDeletion:
             # Verify we're back to main screen (deletion was confirmed)
             assert not isinstance(app.screen, ConfirmDeleteScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_confirm_delete_screen_n_key(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'n' key cancels deletion."""
         mock_sessions.return_value = set()
@@ -150,7 +150,7 @@ class TestWorktreeDeletion:
             # Verify we're back to main screen (deletion was cancelled)
             assert not isinstance(app.screen, ConfirmDeleteScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_confirm_delete_screen_escape_key(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing Escape key cancels deletion."""
         mock_sessions.return_value = set()
@@ -172,7 +172,7 @@ class TestWorktreeDeletion:
             # Verify we're back to main screen (deletion was cancelled)
             assert not isinstance(app.screen, ConfirmDeleteScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_d_keybinding_opens_delete_confirmation_with_selection(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'd' opens delete confirmation when worktree is selected."""
         mock_sessions.return_value = set()
@@ -196,7 +196,7 @@ class TestWorktreeDeletion:
             # Verify the screen was initialized with correct worktree name
             assert app.screen.worktree_name == "feature-one"
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_d_keybinding_shows_warning_without_selection(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'd' shows warning when no worktree is selected."""
         mock_sessions.return_value = set()
@@ -231,11 +231,21 @@ class TestWorktreeDeletion:
             # Verify no modal screen was opened
             assert len(app.screen_stack) == 1
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
-    async def test_worktree_deletion_successful_without_tmux_session(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    @patch('src.widgets.get_worktree_pr_status')
+    @patch('src.widgets.get_active_tmux_sessions')
+    @patch('src.app.get_worktree_directories')
+    @patch('src.app.get_worktree_pr_status')
+    @patch('src.app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_worktree_deletion_successful_without_tmux_session(self, mock_sessions: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
         """Test successful worktree deletion when no corresponding tmux session exists."""
         mock_sessions.return_value = set()  # No active sessions
+        mock_app_sessions.return_value = set()  # Mock for sidebar refresh
+        mock_app_pr.return_value = set()  # Mock for sidebar refresh
+        mock_app_dirs.return_value = []  # Mock for sidebar refresh
+        mock_widgets_sessions.return_value = set()  # Mock for Sidebar compose
+        mock_widgets_pr.return_value = set()  # Mock for Sidebar compose
 
         # Mock successful worktree-manager remove command
         worktree_remove_result = MagicMock(returncode=0, stderr="")
@@ -297,11 +307,21 @@ class TestWorktreeDeletion:
             # Verify selected worktree was cleared
             assert app.selected_worktree == ""
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
-    async def test_worktree_deletion_successful_with_tmux_session(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    @patch('src.widgets.get_worktree_pr_status')
+    @patch('src.widgets.get_active_tmux_sessions')
+    @patch('src.app.get_worktree_directories')
+    @patch('src.app.get_worktree_pr_status')
+    @patch('src.app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_worktree_deletion_successful_with_tmux_session(self, mock_sessions: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
         """Test successful worktree deletion when corresponding tmux session exists."""
         mock_sessions.return_value = set()
+        mock_app_sessions.return_value = set()  # Mock for sidebar refresh
+        mock_app_pr.return_value = set()  # Mock for sidebar refresh
+        mock_app_dirs.return_value = []  # Mock for sidebar refresh
+        mock_widgets_sessions.return_value = set()  # Mock for Sidebar compose
+        mock_widgets_pr.return_value = set()  # Mock for Sidebar compose
 
         # Mock successful worktree-manager remove command
         worktree_remove_result = MagicMock(returncode=0, stderr="")
@@ -368,11 +388,21 @@ class TestWorktreeDeletion:
             assert "and its tmux session deleted successfully" in notifications[0][0]
             assert notifications[0][1] == "information"
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
-    async def test_worktree_deletion_handles_worktree_manager_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    @patch('src.widgets.get_worktree_pr_status')
+    @patch('src.widgets.get_active_tmux_sessions')
+    @patch('src.app.get_worktree_directories')
+    @patch('src.app.get_worktree_pr_status')
+    @patch('src.app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_worktree_deletion_handles_worktree_manager_failure(self, mock_sessions: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
         """Test that worktree deletion handles worktree-manager command failure."""
         mock_sessions.return_value = set()
+        mock_app_sessions.return_value = set()  # Mock for sidebar refresh (shouldn't be called)
+        mock_app_pr.return_value = set()  # Mock for sidebar refresh (shouldn't be called)
+        mock_app_dirs.return_value = []  # Mock for sidebar refresh (shouldn't be called)
+        mock_widgets_sessions.return_value = set()  # Mock for Sidebar compose
+        mock_widgets_pr.return_value = set()  # Mock for Sidebar compose
 
         # Mock failed worktree-manager remove command
         mock_subprocess.return_value = MagicMock(returncode=1, stderr="Failed to remove worktree")
@@ -405,8 +435,8 @@ class TestWorktreeDeletion:
             assert len(worktree_calls) == 1
             assert len(tmux_calls) == 0
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_worktree_deletion_handles_tmux_kill_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that worktree deletion handles tmux kill-session failure gracefully."""
         mock_sessions.return_value = set()
@@ -472,8 +502,8 @@ class TestWorktreeDeletion:
 
             # Should return immediately without doing anything (no assertion needed for early return)
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_worktree_deletion_handles_no_prefix(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that worktree deletion works correctly for worktrees without prefix."""
         mock_sessions.return_value = set()

@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from app import get_worktree_directories, is_bare_git_repository
+from src import get_worktree_directories, is_bare_git_repository
 
 
 class TestBareRepository:

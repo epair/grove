@@ -8,13 +8,13 @@ from subprocess import CompletedProcess
 import pytest
 from textual.widgets import ListView, ListItem, Label
 
-from app import GroveApp, get_active_tmux_sessions
+from src import GroveApp, get_active_tmux_sessions
 
 
 class TestTmuxIntegration:
     """Tests for tmux session integration."""
 
-    @patch('app.subprocess.run')
+    @patch('src.utils.subprocess.run')
     def test_get_active_tmux_sessions_success(self, mock_run: Any) -> None:
         """Test that get_active_tmux_sessions correctly parses tmux output."""
         # Mock successful tmux command with session output
@@ -29,7 +29,7 @@ class TestTmuxIntegration:
         expected_sessions = {'session1', 'session2', 'feature-one'}
         assert sessions == expected_sessions
 
-    @patch('app.subprocess.run')
+    @patch('src.utils.subprocess.run')
     def test_get_active_tmux_sessions_no_sessions(self, mock_run: Any) -> None:
         """Test that get_active_tmux_sessions handles no sessions gracefully."""
         # Mock tmux command with no sessions (returns empty output)
@@ -43,7 +43,7 @@ class TestTmuxIntegration:
         sessions = get_active_tmux_sessions()
         assert sessions == set()
 
-    @patch('app.subprocess.run')
+    @patch('src.utils.subprocess.run')
     def test_get_active_tmux_sessions_tmux_not_found(self, mock_run: Any) -> None:
         """Test that get_active_tmux_sessions handles tmux not being installed."""
         # Mock FileNotFoundError when tmux is not installed
@@ -52,7 +52,7 @@ class TestTmuxIntegration:
         sessions = get_active_tmux_sessions()
         assert sessions == set()
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.widgets.get_active_tmux_sessions')
     async def test_sidebar_with_active_tmux_sessions(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that sidebar shows filled circles for directories with active tmux sessions."""
         # Mock tmux sessions where one matches a worktree directory

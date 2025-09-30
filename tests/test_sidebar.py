@@ -7,13 +7,13 @@ from unittest.mock import patch
 import pytest
 from textual.widgets import ListView, ListItem, Label
 
-from app import GroveApp, MetadataDisplay
+from src import GroveApp, MetadataDisplay
 
 
 class TestSidebar:
     """Tests for sidebar UI functionality."""
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_grove_app_sidebar_content(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that the Grove app's sidebar displays the correct worktree directories with icons."""
         # Mock no tmux sessions for consistent testing
@@ -52,7 +52,7 @@ class TestSidebar:
             list_items = sidebar.query(ListItem)
             assert len(list_items) > 0
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_sidebar_highlighting_updates_metadata(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that highlighting a worktree in sidebar updates the metadata display."""
         mock_sessions.return_value = set()
@@ -74,7 +74,7 @@ class TestSidebar:
             content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
             assert "# bugfix-01" in content
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_reactive_selected_worktree_updates_display(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that changing selected_worktree reactive attribute updates the display."""
         mock_sessions.return_value = set()
@@ -92,8 +92,8 @@ class TestSidebar:
             content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
             assert "# feature-one" in content
 
-    @patch('app.get_active_tmux_sessions')
-    @patch('app.get_worktree_pr_status')
+    @patch('src.utils.get_active_tmux_sessions')
+    @patch('src.utils.get_worktree_pr_status')
     async def test_sidebar_with_pr_indicators(self, mock_pr_status: Any, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that sidebar shows PR indicators for worktrees with published PRs."""
         # Mock no tmux sessions but feature-one has a PR
@@ -118,8 +118,8 @@ class TestSidebar:
             expected_directories = ["○ bugfix-01", "○ [bold]PR[/bold] feature-one"]
             assert directory_labels == expected_directories
 
-    @patch('app.get_active_tmux_sessions')
-    @patch('app.get_worktree_pr_status')
+    @patch('src.widgets.get_active_tmux_sessions')
+    @patch('src.widgets.get_worktree_pr_status')
     async def test_sidebar_with_tmux_and_pr_indicators(self, mock_pr_status: Any, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that sidebar shows both tmux and PR indicators correctly."""
         # Mock tmux session for bugfix-01 and PR for feature-one
@@ -144,7 +144,7 @@ class TestSidebar:
             expected_directories = ["● bugfix-01", "○ [bold]PR[/bold] feature-one"]
             assert directory_labels == expected_directories
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_delete_action_integration_with_sidebar_selection(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test full integration of selecting worktree from sidebar and deleting it."""
         mock_sessions.return_value = set()
@@ -161,7 +161,7 @@ class TestSidebar:
             assert app.selected_worktree == "bugfix-01"
 
             # Import needed for this test
-            from app import ConfirmDeleteScreen
+            from src import ConfirmDeleteScreen
 
             # Press 'd' to open delete confirmation
             await pilot.press("d")

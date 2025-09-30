@@ -7,13 +7,13 @@ from unittest.mock import patch, MagicMock
 import pytest
 from textual.widgets import Label, Input, Button
 
-from app import GroveApp, WorktreeFormScreen
+from src import GroveApp, WorktreeFormScreen
 
 
 class TestWorktreeCreation:
     """Tests for worktree creation feature."""
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_n_keybinding_opens_worktree_form(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'n' opens the WorktreeFormScreen."""
         mock_sessions.return_value = set()
@@ -38,7 +38,7 @@ class TestWorktreeCreation:
             assert form.query_one("#create_button", Button) is not None
             assert form.query_one("#cancel_button", Button) is not None
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_worktree_form_initial_values(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that the WorktreeFormScreen has correct initial values."""
         mock_sessions.return_value = set()
@@ -57,7 +57,7 @@ class TestWorktreeCreation:
             name_input = form.query_one("#name_input", Input)
             assert name_input.value == ""
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_cancel_button_closes_form(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that clicking Cancel button closes the form."""
         mock_sessions.return_value = set()
@@ -77,7 +77,7 @@ class TestWorktreeCreation:
             # Verify we're back to the main screen
             assert not isinstance(app.screen, WorktreeFormScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_escape_key_closes_form(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing Escape key closes the form."""
         mock_sessions.return_value = set()
@@ -97,7 +97,7 @@ class TestWorktreeCreation:
             # Verify we're back to the main screen
             assert not isinstance(app.screen, WorktreeFormScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_create_button_with_empty_name_validation(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that create button doesn't submit when name is empty."""
         mock_sessions.return_value = set()
@@ -119,8 +119,8 @@ class TestWorktreeCreation:
             # Verify we're still on the form screen (validation prevented submission)
             assert isinstance(app.screen, WorktreeFormScreen)
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_create_button_with_valid_data(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that create button submits form with valid data."""
         mock_sessions.return_value = set()
@@ -152,8 +152,8 @@ class TestWorktreeCreation:
             # Verify subprocess was called (form was submitted)
             assert mock_subprocess.called
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_enter_key_in_name_field_submits_form(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that pressing Enter in name field submits the form."""
         mock_sessions.return_value = set()
@@ -186,8 +186,8 @@ class TestWorktreeCreation:
             # Verify subprocess was called (form was submitted)
             assert mock_subprocess.called
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_worktree_creation_subprocess_calls(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that worktree creation makes correct subprocess calls."""
         mock_sessions.return_value = set()
@@ -239,8 +239,8 @@ class TestWorktreeCreation:
             # Verify app exit was called on success
             assert exit_called is True
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_worktree_creation_handles_command_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that worktree creation handles command failures gracefully."""
         mock_sessions.return_value = set()

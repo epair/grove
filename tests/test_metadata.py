@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from app import GroveApp, MetadataDisplay, get_worktree_metadata
+from src import GroveApp, MetadataDisplay, get_worktree_metadata
 
 
 class TestMetadata:

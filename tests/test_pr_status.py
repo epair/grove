@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from app import get_worktree_pr_status
+from src import get_worktree_pr_status
 
 
 class TestPRStatus:

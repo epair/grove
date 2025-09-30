@@ -18,34 +18,51 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 
 ## Architecture
 
-- **Main Application**: `app.py` - Single-file Textual application using Python 3.13+
+- **Main Application**: `src/` - Modular Python package using Python 3.13+
+  - `src/app.py` - GroveApp main application class
+  - `src/widgets.py` - Sidebar and MetadataDisplay widgets
+  - `src/screens.py` - Modal screens (WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen)
+  - `src/utils.py` - Utility functions for git, tmux, and metadata operations
+  - `src/__init__.py` - Package exports
+  - `src/__main__.py` - Entry point with main() function
 - **Styling**: `app.tcss` - Textual CSS for UI styling
-- **Testing**: `tests/test_integration.py` - Integration tests for TUI functionality
+- **Testing**: `tests/` - Comprehensive test suite covering all functionality
 - **Test Data**: `tests/example_repo/` - Bare git repository structure for testing
 - **Dependencies**: Requires `textual` library (currently v6.1.0) and `pytest` for testing
 
 ### Key Components
 
+**Application** (`src/app.py`):
 - `GroveApp`: Main Textual app class using tokyo-night theme
+
+**Widgets** (`src/widgets.py`):
 - `Sidebar`: ListView widget that displays worktree directories with tmux session indicators
+- `MetadataDisplay`: Markdown widget for displaying worktree metadata
+
+**Screens** (`src/screens.py`):
 - `WorktreeFormScreen`: Modal form for creating new worktrees (branch name and path)
 - `ConfirmDeleteScreen`: Modal confirmation dialog for worktree deletion
+- `PRFormScreen`: Modal form for creating pull requests
+
+**Utilities** (`src/utils.py`):
 - `is_bare_git_repository()`: Validates the environment is a bare git repo
 - `get_worktree_directories()`: Discovers directories at the same level as `.bare`
 - `get_active_tmux_sessions()`: Retrieves active tmux session names
+- `get_worktree_pr_status()`: Gets worktrees with published PRs
+- `check_remote_branch_exists()`: Checks if remote branch exists
 - `get_worktree_metadata()`: Reads metadata files for a worktree
-- `delete_worktree()`: Removes a worktree using git commands
+- `get_worktree_git_info()`: Gets git information for a worktree
 
 ## Development Commands
 
 **Run the application:**
 ```bash
-python app.py  # Must be run from a bare git repository directory
+python -m src  # Must be run from a bare git repository directory
 ```
 
 **Syntax check:**
 ```bash
-python -m py_compile app.py
+python -m py_compile src/*.py
 ```
 
 **Run tests:**
@@ -53,14 +70,14 @@ python -m py_compile app.py
 python -m pytest tests/ -v
 ```
 
-**Run integration tests only:**
+**Run specific test file:**
 ```bash
-python -m pytest tests/test_integration.py -v
+python -m pytest tests/test_sidebar.py -v
 ```
 
 **Type checking:**
 ```bash
-mypy app.py tests/
+mypy src/
 ```
 
 **Note:** Always use `python -m pytest` instead of `pytest` directly to ensure proper Python path setup for module imports. The codebase uses comprehensive type hints throughout - all functions should include return type annotations and parameter types where applicable.
@@ -119,12 +136,17 @@ The project includes comprehensive integration tests that validate the TUI funct
 
 ### Test Structure
 
-- **Integration Tests**: `tests/test_integration.py` - Tests core TUI functionality including:
-  - Bare git repository detection
-  - Worktree directory discovery and listing
-  - UI sidebar content validation
-  - Hidden directory exclusion (`.bare`, `.git`, `.grove`)
-  - App startup and error handling
+The test suite is organized into modular files, each testing a specific area of functionality:
+
+- **Bare Repository Tests** (`tests/test_bare_repo.py`): Tests bare git repository detection and worktree directory discovery
+- **Sidebar Tests** (`tests/test_sidebar.py`): Tests sidebar UI functionality, highlighting, and selection
+- **Metadata Tests** (`tests/test_metadata.py`): Tests worktree metadata display and retrieval
+- **Git Info Tests** (`tests/test_git_info.py`): Tests git information retrieval (commit messages, dates, etc.)
+- **PR Status Tests** (`tests/test_pr_status.py`): Tests PR status detection and indicators
+- **Tmux Integration Tests** (`tests/test_tmux_integration.py`): Tests tmux session integration
+- **Worktree Creation Tests** (`tests/test_worktree_creation.py`): Tests worktree creation form and workflow
+- **Worktree Deletion Tests** (`tests/test_worktree_deletion.py`): Tests worktree deletion with confirmation
+- **PR Creation Tests** (`tests/test_pr_creation.py`): Tests PR creation form and GitHub integration
 
 - **Test Data**: `tests/example_repo/` - Complete bare git repository structure with:
   - `.bare/` directory (bare git repo)
@@ -135,8 +157,9 @@ The project includes comprehensive integration tests that validate the TUI funct
 
 - **pytest.ini**: Configured for async test support and proper test discovery
 - **Async Testing**: Uses Textual's built-in testing capabilities with `app.run_test()`
-- **Fixtures**: Provides directory switching and test isolation
+- **Fixtures** (`tests/conftest.py`): Provides directory switching and test isolation
+- **Imports**: All tests import from `src` package (e.g., `from src import GroveApp, Sidebar`)
 
 ### Running Tests
 
-All tests must be run with `python -m pytest` to ensure proper module import resolution. The test suite validates both the core functions (`is_bare_git_repository()`, `get_worktree_directories()`) and the full TUI interface integration.
+All tests must be run with `python -m pytest` to ensure proper module import resolution. The test suite validates both the core utility functions and the full TUI interface integration.

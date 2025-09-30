@@ -6,13 +6,13 @@ from subprocess import CompletedProcess
 from typing import Any
 from unittest.mock import patch
 
-from app import get_worktree_git_info
+from src import get_worktree_git_info
 
 
 class TestGitInfo:
     """Tests for git information functionality."""
 
-    @patch('app.subprocess.run')
+    @patch('src.utils.subprocess.run')
     def test_get_worktree_git_info_success(self, mock_run: Any, change_to_example_repo: Path) -> None:
         """Test that get_worktree_git_info correctly parses git log output."""
         # Mock successful git log command
@@ -29,7 +29,7 @@ class TestGitInfo:
         assert git_info["commit_date"] == "2024-09-28 10:30:45 -0700"
         assert git_info["committer"] == "John Doe <john@example.com>"
 
-    @patch('app.subprocess.run')
+    @patch('src.utils.subprocess.run')
     def test_get_worktree_git_info_failure(self, mock_run: Any, change_to_example_repo: Path) -> None:
         """Test that get_worktree_git_info handles git command failure gracefully."""
         # Mock failed git log command

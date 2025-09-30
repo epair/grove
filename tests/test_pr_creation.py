@@ -7,13 +7,13 @@ from unittest.mock import patch, MagicMock
 import pytest
 from textual.widgets import Label, Input, Button, Checkbox
 
-from app import GroveApp, PRFormScreen
+from src import GroveApp, PRFormScreen
 
 
 class TestPRCreation:
     """Tests for PR creation feature."""
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_p_keybinding_opens_pr_form(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'p' opens the PRFormScreen."""
         mock_sessions.return_value = set()
@@ -42,7 +42,7 @@ class TestPRCreation:
             assert form.query_one("#create_pr_button", Button) is not None
             assert form.query_one("#cancel_pr_button", Button) is not None
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_p_keybinding_shows_warning_without_selection(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing 'p' shows warning when no worktree is selected."""
         mock_sessions.return_value = set()
@@ -77,7 +77,7 @@ class TestPRCreation:
             # Verify no modal screen was opened
             assert len(app.screen_stack) == 1
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_checkboxes_present(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that PR form has all required checkboxes."""
         mock_sessions.return_value = set()
@@ -96,7 +96,7 @@ class TestPRCreation:
                 assert checkbox is not None
                 assert reviewer in str(checkbox.label)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_njm_selected_by_default(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that 'njm' checkbox is selected by default."""
         mock_sessions.return_value = set()
@@ -118,7 +118,7 @@ class TestPRCreation:
                 checkbox = form.query_one(f"#checkbox_{reviewer}", Checkbox)
                 assert checkbox.value is False
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_cancel_button_closes_form(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that clicking Cancel button closes the PR form."""
         mock_sessions.return_value = set()
@@ -139,7 +139,7 @@ class TestPRCreation:
             # Verify we're back to the main screen
             assert not isinstance(app.screen, PRFormScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_escape_key_closes_form(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that pressing Escape key closes the PR form."""
         mock_sessions.return_value = set()
@@ -160,7 +160,7 @@ class TestPRCreation:
             # Verify we're back to the main screen
             assert not isinstance(app.screen, PRFormScreen)
 
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_validation_empty_title(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that PR form doesn't submit with empty title."""
         mock_sessions.return_value = set()
@@ -183,8 +183,8 @@ class TestPRCreation:
             # Verify we're still on the form screen (validation prevented submission)
             assert isinstance(app.screen, PRFormScreen)
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_submission_with_valid_data(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that PR form submits correctly with valid data."""
         mock_sessions.return_value = set()
@@ -239,8 +239,8 @@ class TestPRCreation:
             gh_calls = [call for call in mock_subprocess.call_args_list if 'gh' in call[0][0][0]]
             assert len(gh_calls) == 1
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_handles_git_push_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that PR form handles git push failure gracefully."""
         mock_sessions.return_value = set()
@@ -275,8 +275,8 @@ class TestPRCreation:
             assert "Failed to push" in notifications[0][0]
             assert notifications[0][1] == "error"
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_handles_gh_pr_create_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that PR form handles gh pr create failure gracefully."""
         mock_sessions.return_value = set()
@@ -313,9 +313,9 @@ class TestPRCreation:
             assert "Failed to create PR" in notifications[0][0]
             assert notifications[0][1] == "error"
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
-    @patch('app.Path.write_text')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
+    @patch('src.app.Path.write_text')
     async def test_pr_form_writes_env_file(self, mock_write_text: Any, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that PR form writes WORKTREE_PR_PUBLISHED to .env file."""
         mock_sessions.return_value = set()
@@ -351,8 +351,8 @@ class TestPRCreation:
             written_content = mock_write_text.call_args[0][0]
             assert "WORKTREE_PR_PUBLISHED=true" in written_content
 
-    @patch('app.subprocess.run')
-    @patch('app.get_active_tmux_sessions')
+    @patch('src.app.subprocess.run')
+    @patch('src.utils.get_active_tmux_sessions')
     async def test_pr_form_enter_key_submission(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that pressing Enter in title field submits the PR form."""
         mock_sessions.return_value = set()
