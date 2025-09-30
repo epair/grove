@@ -28,7 +28,7 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 - **Styling**: `app.tcss` - Textual CSS for UI styling
 - **Testing**: `tests/` - Comprehensive test suite covering all functionality
 - **Test Data**: `tests/example_repo/` - Bare git repository structure for testing
-- **Dependencies**: Requires `textual` library (currently v6.1.0), `gitpython` (v3.1+) for git operations, and `pytest` for testing
+- **Dependencies**: Requires `textual` library (currently v6.1.0), `gitpython` (v3.1+) for git operations, `pytest` for testing, and `pytest-textual-snapshot` for visual regression testing
 
 ### Key Components
 
@@ -149,11 +149,13 @@ The test suite is organized into modular files, each testing a specific area of 
 - **Worktree Creation Tests** (`tests/test_worktree_creation.py`): Tests worktree creation form and workflow
 - **Worktree Deletion Tests** (`tests/test_worktree_deletion.py`): Tests worktree deletion with confirmation
 - **PR Creation Tests** (`tests/test_pr_creation.py`): Tests PR creation form and GitHub integration
+- **Snapshot Tests** (`tests/test_snapshots.py`): Visual regression tests that capture and compare screen renderings
 
 - **Test Data**: `tests/example_repo/` - Complete bare git repository structure with:
   - `.bare/` directory (bare git repo)
   - `feature-one/` and `bugfix-01/` worktree directories
   - `.grove/metadata/` structure for testing metadata features
+- **Snapshot Storage**: `tests/__snapshots__/test_snapshots/` - SVG snapshots of screen renderings
 
 ### Test Configuration
 
@@ -161,6 +163,32 @@ The test suite is organized into modular files, each testing a specific area of 
 - **Async Testing**: Uses Textual's built-in testing capabilities with `app.run_test()`
 - **Fixtures** (`tests/conftest.py`): Provides directory switching and test isolation
 - **Imports**: All tests import from `src` package (e.g., `from src import GroveApp, Sidebar`)
+
+### Snapshot Testing
+
+The project uses `pytest-textual-snapshot` for visual regression testing. Snapshot tests capture the visual rendering of the TUI and compare it against baseline snapshots to detect unintended UI changes.
+
+**Available Snapshot Tests:**
+- `test_main_app_screen` - Default state with sidebar and metadata display
+- `test_main_app_screen_with_tmux_session` - Main screen with active tmux session indicator
+- `test_main_app_with_selected_worktree` - Main screen with selected worktree showing metadata
+- `test_worktree_form_screen` - Empty worktree creation form modal
+- `test_worktree_form_screen_with_input` - Worktree form with user input filled in
+- `test_confirm_delete_screen` - Delete confirmation dialog modal
+- `test_pr_form_screen` - Empty PR creation form modal
+- `test_pr_form_screen_with_input` - PR form with title and reviewer selections
+
+**Run snapshot tests:**
+```bash
+python -m pytest tests/test_snapshots.py -v
+```
+
+**Update snapshots after intentional UI changes:**
+```bash
+python -m pytest tests/test_snapshots.py --snapshot-update
+```
+
+**IMPORTANT:** Always review the snapshot changes before updating. When a snapshot test fails, an HTML report is generated at `snapshot_report.html` showing the visual differences. Only update snapshots with `--snapshot-update` after verifying the changes are intentional and correct.
 
 ### Running Tests
 
