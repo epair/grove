@@ -237,8 +237,9 @@ class TestWorktreeDeletion:
     @patch('src.app.get_worktree_pr_status')
     @patch('src.app.get_active_tmux_sessions')
     @patch('src.app.subprocess.run')
+    @patch('src.app.remove_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_deletion_successful_without_tmux_session(self, mock_sessions: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
+    async def test_worktree_deletion_successful_without_tmux_session(self, mock_sessions: Any, mock_remove_worktree: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
         """Test successful worktree deletion when no corresponding tmux session exists."""
         mock_sessions.return_value = set()  # No active sessions
         mock_app_sessions.return_value = set()  # Mock for sidebar refresh
@@ -247,21 +248,11 @@ class TestWorktreeDeletion:
         mock_widgets_sessions.return_value = set()  # Mock for Sidebar compose
         mock_widgets_pr.return_value = set()  # Mock for Sidebar compose
 
-        # Mock successful worktree-manager remove command
-        worktree_remove_result = MagicMock(returncode=0, stderr="")
+        # Mock successful worktree removal
+        mock_remove_worktree.return_value = (True, "")
 
         # Mock tmux has-session command returning failure (session doesn't exist)
-        tmux_has_session_result = MagicMock(returncode=1, stderr="session not found")
-
-        # Configure subprocess.run to return different results based on command
-        def subprocess_side_effect(cmd, **kwargs):
-            if cmd[0] == "worktree-manager":
-                return worktree_remove_result
-            elif cmd[0] == "tmux" and cmd[1] == "has-session":
-                return tmux_has_session_result
-            return MagicMock(returncode=0)
-
-        mock_subprocess.side_effect = subprocess_side_effect
+        mock_subprocess.return_value = MagicMock(returncode=1, stderr="session not found")
 
         app = GroveApp()
 
@@ -284,16 +275,12 @@ class TestWorktreeDeletion:
             # Call deletion handler with confirmation
             app.handle_worktree_deletion(True)
 
-            # Verify worktree-manager remove was called correctly
-            worktree_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "worktree-manager"]
-            assert len(worktree_calls) == 1
-            assert worktree_calls[0][0][0] == ["worktree-manager", "remove", "ep/test-feature"]
-            assert worktree_calls[0][1]["env"]["WORKTREE_PREFIX"] == "ep/"
+            # Verify remove_worktree_with_branch was called correctly
+            mock_remove_worktree.assert_called_once_with("ep/test-feature")
 
             # Verify tmux has-session was called
-            tmux_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "tmux"]
-            assert len(tmux_calls) == 1
-            assert tmux_calls[0][0][0] == ["tmux", "has-session", "-t", "ep/test-feature"]
+            assert mock_subprocess.called
+            assert mock_subprocess.call_args[0][0] == ["tmux", "has-session", "-t", "ep/test-feature"]
 
             # Verify success notification
             assert len(notifications) == 1
@@ -313,8 +300,9 @@ class TestWorktreeDeletion:
     @patch('src.app.get_worktree_pr_status')
     @patch('src.app.get_active_tmux_sessions')
     @patch('src.app.subprocess.run')
+    @patch('src.app.remove_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_deletion_successful_with_tmux_session(self, mock_sessions: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
+    async def test_worktree_deletion_successful_with_tmux_session(self, mock_sessions: Any, mock_remove_worktree: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
         """Test successful worktree deletion when corresponding tmux session exists."""
         mock_sessions.return_value = set()
         mock_app_sessions.return_value = set()  # Mock for sidebar refresh
@@ -323,8 +311,8 @@ class TestWorktreeDeletion:
         mock_widgets_sessions.return_value = set()  # Mock for Sidebar compose
         mock_widgets_pr.return_value = set()  # Mock for Sidebar compose
 
-        # Mock successful worktree-manager remove command
-        worktree_remove_result = MagicMock(returncode=0, stderr="")
+        # Mock successful worktree removal
+        mock_remove_worktree.return_value = (True, "")
 
         # Mock tmux has-session command returning success (session exists)
         tmux_has_session_result = MagicMock(returncode=0, stderr="")
@@ -334,9 +322,7 @@ class TestWorktreeDeletion:
 
         # Configure subprocess.run to return different results based on command
         def subprocess_side_effect(cmd, **kwargs):
-            if cmd[0] == "worktree-manager":
-                return worktree_remove_result
-            elif cmd[0] == "tmux" and cmd[1] == "has-session":
+            if cmd[0] == "tmux" and cmd[1] == "has-session":
                 return tmux_has_session_result
             elif cmd[0] == "tmux" and cmd[1] == "kill-session":
                 return tmux_kill_session_result
@@ -365,11 +351,8 @@ class TestWorktreeDeletion:
             # Call deletion handler with confirmation
             app.handle_worktree_deletion(True)
 
-            # Verify worktree-manager remove was called correctly
-            worktree_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "worktree-manager"]
-            assert len(worktree_calls) == 1
-            assert worktree_calls[0][0][0] == ["worktree-manager", "remove", "feature/awesome-feature"]
-            assert worktree_calls[0][1]["env"]["WORKTREE_PREFIX"] == "feature/"
+            # Verify remove_worktree_with_branch was called correctly
+            mock_remove_worktree.assert_called_once_with("feature/awesome-feature")
 
             # Verify both tmux commands were called
             tmux_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "tmux"]
@@ -393,10 +376,10 @@ class TestWorktreeDeletion:
     @patch('src.app.get_worktree_directories')
     @patch('src.app.get_worktree_pr_status')
     @patch('src.app.get_active_tmux_sessions')
-    @patch('src.app.subprocess.run')
+    @patch('src.app.remove_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_deletion_handles_worktree_manager_failure(self, mock_sessions: Any, mock_subprocess: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
-        """Test that worktree deletion handles worktree-manager command failure."""
+    async def test_worktree_deletion_handles_worktree_manager_failure(self, mock_sessions: Any, mock_remove_worktree: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
+        """Test that worktree deletion handles worktree removal failure."""
         mock_sessions.return_value = set()
         mock_app_sessions.return_value = set()  # Mock for sidebar refresh (shouldn't be called)
         mock_app_pr.return_value = set()  # Mock for sidebar refresh (shouldn't be called)
@@ -404,8 +387,8 @@ class TestWorktreeDeletion:
         mock_widgets_sessions.return_value = set()  # Mock for Sidebar compose
         mock_widgets_pr.return_value = set()  # Mock for Sidebar compose
 
-        # Mock failed worktree-manager remove command
-        mock_subprocess.return_value = MagicMock(returncode=1, stderr="Failed to remove worktree")
+        # Mock failed worktree removal
+        mock_remove_worktree.return_value = (False, "Git error: Failed to remove worktree")
 
         app = GroveApp()
 
@@ -428,21 +411,18 @@ class TestWorktreeDeletion:
             assert "Failed to delete worktree" in notifications[0][0]
             assert notifications[0][1] == "error"
 
-            # Verify only worktree-manager was called (no tmux commands)
-            worktree_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "worktree-manager"]
-            tmux_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "tmux"]
-
-            assert len(worktree_calls) == 1
-            assert len(tmux_calls) == 0
+            # Verify remove_worktree_with_branch was called
+            mock_remove_worktree.assert_called_once_with("test-feature")
 
     @patch('src.app.subprocess.run')
+    @patch('src.app.remove_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_deletion_handles_tmux_kill_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    async def test_worktree_deletion_handles_tmux_kill_failure(self, mock_sessions: Any, mock_remove_worktree: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that worktree deletion handles tmux kill-session failure gracefully."""
         mock_sessions.return_value = set()
 
-        # Mock successful worktree-manager remove command
-        worktree_remove_result = MagicMock(returncode=0, stderr="")
+        # Mock successful worktree removal
+        mock_remove_worktree.return_value = (True, "")
 
         # Mock tmux has-session command returning success (session exists)
         tmux_has_session_result = MagicMock(returncode=0, stderr="")
@@ -452,9 +432,7 @@ class TestWorktreeDeletion:
 
         # Configure subprocess.run to return different results based on command
         def subprocess_side_effect(cmd, **kwargs):
-            if cmd[0] == "worktree-manager":
-                return worktree_remove_result
-            elif cmd[0] == "tmux" and cmd[1] == "has-session":
+            if cmd[0] == "tmux" and cmd[1] == "has-session":
                 return tmux_has_session_result
             elif cmd[0] == "tmux" and cmd[1] == "kill-session":
                 return tmux_kill_session_result
@@ -503,13 +481,17 @@ class TestWorktreeDeletion:
             # Should return immediately without doing anything (no assertion needed for early return)
 
     @patch('src.app.subprocess.run')
+    @patch('src.app.remove_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_deletion_handles_no_prefix(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    async def test_worktree_deletion_handles_no_prefix(self, mock_sessions: Any, mock_remove_worktree: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
         """Test that worktree deletion works correctly for worktrees without prefix."""
         mock_sessions.return_value = set()
 
-        # Mock successful worktree-manager remove command
-        mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+        # Mock successful worktree removal
+        mock_remove_worktree.return_value = (True, "")
+
+        # Mock tmux has-session returning failure (no session)
+        mock_subprocess.return_value = MagicMock(returncode=1, stderr="")
 
         app = GroveApp()
 
@@ -532,8 +514,5 @@ class TestWorktreeDeletion:
             # Call deletion handler with confirmation
             app.handle_worktree_deletion(True)
 
-            # Verify worktree-manager remove was called with empty prefix
-            worktree_calls = [call for call in mock_subprocess.call_args_list if call[0][0][0] == "worktree-manager"]
-            assert len(worktree_calls) == 1
-            assert worktree_calls[0][0][0] == ["worktree-manager", "remove", "simple-feature"]
-            assert worktree_calls[0][1]["env"]["WORKTREE_PREFIX"] == ""
+            # Verify remove_worktree_with_branch was called
+            mock_remove_worktree.assert_called_once_with("simple-feature")

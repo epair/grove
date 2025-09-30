@@ -187,12 +187,16 @@ class TestWorktreeCreation:
             assert mock_subprocess.called
 
     @patch('src.app.subprocess.run')
+    @patch('src.app.create_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_creation_subprocess_calls(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
-        """Test that worktree creation makes correct subprocess calls."""
+    async def test_worktree_creation_subprocess_calls(self, mock_sessions: Any, mock_create_worktree: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+        """Test that worktree creation makes correct GitPython calls."""
         mock_sessions.return_value = set()
 
-        # Mock successful worktree-manager command
+        # Mock successful worktree creation
+        mock_create_worktree.return_value = (True, "")
+
+        # Mock successful tmux-sessionizer command
         mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
 
         app = GroveApp()
@@ -212,26 +216,18 @@ class TestWorktreeCreation:
             # Call the handler directly
             app.handle_worktree_creation(form_data)
 
-            # Verify subprocess calls were made correctly (should have at least 2 calls)
-            assert mock_subprocess.call_count >= 2
-
-            # Find the worktree-manager and tmux-sessionizer calls
-            worktree_call = None
-            tmux_call = None
-
-            for call in mock_subprocess.call_args_list:
-                cmd = call[0][0]
-                if cmd[0] == "worktree-manager":
-                    worktree_call = call
-                elif cmd[0] == "tmux-sessionizer":
-                    tmux_call = call
-
-            # Verify worktree-manager call
-            assert worktree_call is not None
-            assert worktree_call[0][0] == ["worktree-manager", "add", "test-feature"]
-            assert worktree_call[1]["env"]["WORKTREE_PREFIX"] == "ep/"
+            # Verify create_worktree_with_branch was called with correct parameters
+            mock_create_worktree.assert_called_once_with("test-feature", "ep/")
 
             # Verify tmux-sessionizer call
+            assert mock_subprocess.call_count >= 1
+            # Find the tmux-sessionizer call (there may be other tmux calls)
+            tmux_call = None
+            for call in mock_subprocess.call_args_list:
+                if call[0][0][0] == "tmux-sessionizer":
+                    tmux_call = call
+                    break
+
             assert tmux_call is not None
             expected_path = str(Path.cwd() / "test-feature")
             assert tmux_call[0][0] == ["tmux-sessionizer", expected_path]
@@ -239,14 +235,14 @@ class TestWorktreeCreation:
             # Verify app exit was called on success
             assert exit_called is True
 
-    @patch('src.app.subprocess.run')
+    @patch('src.app.create_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_creation_handles_command_failure(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    async def test_worktree_creation_handles_command_failure(self, mock_sessions: Any, mock_create_worktree: Any, change_to_example_repo: Path) -> None:
         """Test that worktree creation handles command failures gracefully."""
         mock_sessions.return_value = set()
 
-        # Mock failed worktree-manager command
-        mock_subprocess.return_value = MagicMock(returncode=1, stderr="Command failed")
+        # Mock failed worktree creation
+        mock_create_worktree.return_value = (False, "Git error: Command failed")
 
         app = GroveApp()
 
@@ -276,19 +272,8 @@ class TestWorktreeCreation:
             assert "Failed to create worktree" in notify_message
             assert notify_severity == "error"
 
-            # Verify worktree-manager was called but tmux-sessionizer was not
-            worktree_call = None
-            tmux_call = None
-
-            for call in mock_subprocess.call_args_list:
-                cmd = call[0][0]
-                if cmd[0] == "worktree-manager":
-                    worktree_call = call
-                elif cmd[0] == "tmux-sessionizer":
-                    tmux_call = call
-
-            assert worktree_call is not None  # worktree-manager was called
-            assert tmux_call is None  # tmux-sessionizer was not called
+            # Verify create_worktree_with_branch was called
+            mock_create_worktree.assert_called_once_with("test-feature", "ep/")
 
     async def test_worktree_creation_handles_cancel(self, change_to_example_repo: Path) -> None:
         """Test that worktree creation handles cancellation correctly."""

@@ -28,7 +28,7 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 - **Styling**: `app.tcss` - Textual CSS for UI styling
 - **Testing**: `tests/` - Comprehensive test suite covering all functionality
 - **Test Data**: `tests/example_repo/` - Bare git repository structure for testing
-- **Dependencies**: Requires `textual` library (currently v6.1.0) and `pytest` for testing
+- **Dependencies**: Requires `textual` library (currently v6.1.0), `gitpython` (v3.1+) for git operations, and `pytest` for testing
 
 ### Key Components
 
@@ -52,6 +52,8 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 - `check_remote_branch_exists()`: Checks if remote branch exists
 - `get_worktree_metadata()`: Reads metadata files for a worktree
 - `get_worktree_git_info()`: Gets git information for a worktree
+- `create_worktree_with_branch()`: Creates a git worktree with GitPython API
+- `remove_worktree_with_branch()`: Removes a git worktree and its branch with GitPython API
 
 ## Development Commands
 

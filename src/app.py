@@ -1,6 +1,5 @@
 """Main Grove application."""
 
-import os
 import subprocess
 import time
 from pathlib import Path
@@ -15,7 +14,9 @@ from .utils import (
     get_worktree_directories,
     get_active_tmux_sessions,
     get_worktree_pr_status,
-    check_remote_branch_exists
+    check_remote_branch_exists,
+    create_worktree_with_branch,
+    remove_worktree_with_branch
 )
 
 
@@ -72,26 +73,16 @@ class GroveApp(App):
         prefix = form_data["prefix"]
         name = form_data["name"]
 
-        # Set environment variable and run worktree-manager command
-        env = os.environ.copy()
-        env["WORKTREE_PREFIX"] = prefix
-
         try:
-            # Run worktree-manager add command
-            result = subprocess.run(
-                ["worktree-manager", "add", name],
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            # Create worktree using GitPython
+            success, error_msg = create_worktree_with_branch(name, prefix)
 
-            if result.returncode != 0:
-                self.notify(f"Failed to create worktree: {result.stderr}", severity="error")
+            if not success:
+                self.notify(f"Failed to create worktree: {error_msg}", severity="error")
                 return
 
             # Wait a moment for the worktree to be created
-            time.sleep(1)
+            time.sleep(0.5)
 
             # Find the worktree root directory (where .bare is located)
             current_path = Path.cwd()
@@ -122,9 +113,9 @@ class GroveApp(App):
                 self.notify(f"Worktree created but failed to start tmux session: {sessionizer_result.stderr}", severity="warning")
 
         except subprocess.TimeoutExpired:
-            self.notify("Command timed out", severity="error")
-        except FileNotFoundError as e:
-            self.notify(f"Command not found: {e.filename}", severity="error")
+            self.notify("tmux-sessionizer command timed out", severity="error")
+        except FileNotFoundError:
+            self.notify("tmux-sessionizer command not found", severity="error")
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
@@ -137,29 +128,16 @@ class GroveApp(App):
         if not worktree_name:
             return
 
-        # Extract prefix from worktree name
-        # Assume prefix format is "prefix/name" -> extract "prefix/"
-        prefix = ""
-        if "/" in worktree_name:
-            prefix = worktree_name.split("/")[0] + "/"
-
-        # Set environment variable and run worktree-manager remove command
-        env = os.environ.copy()
-        env["WORKTREE_PREFIX"] = prefix
-
         try:
-            # Run worktree-manager remove command
-            result = subprocess.run(
-                ["worktree-manager", "remove", worktree_name],
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            # Remove worktree using GitPython (will query git for the branch name)
+            success, error_msg = remove_worktree_with_branch(worktree_name)
 
-            if result.returncode != 0:
-                self.notify(f"Failed to delete worktree: {result.stderr}", severity="error")
+            if not success:
+                self.notify(f"Failed to delete worktree: {error_msg}", severity="error")
                 return
+
+            # Check if there's a warning about branch deletion
+            has_branch_warning = bool(error_msg)
 
             # Check if there's a tmux session with the same name and kill it
             try:
@@ -181,15 +159,24 @@ class GroveApp(App):
                     )
 
                     if kill_result.returncode == 0:
-                        self.notify(f"Worktree '{worktree_name}' and its tmux session deleted successfully", severity="information")
+                        if has_branch_warning:
+                            self.notify(error_msg, severity="warning")
+                        else:
+                            self.notify(f"Worktree '{worktree_name}' and its tmux session deleted successfully", severity="information")
                     else:
                         self.notify(f"Worktree deleted but failed to kill tmux session: {kill_result.stderr}", severity="warning")
                 else:
-                    self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+                    if has_branch_warning:
+                        self.notify(error_msg, severity="warning")
+                    else:
+                        self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
 
             except (FileNotFoundError, subprocess.SubprocessError):
                 # tmux not available or other error, but worktree was deleted successfully
-                self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+                if has_branch_warning:
+                    self.notify(error_msg, severity="warning")
+                else:
+                    self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
 
             # Refresh the sidebar by recreating it
             sidebar = self.query_one("#sidebar", Sidebar)
@@ -211,9 +198,7 @@ class GroveApp(App):
                 self.selected_worktree = ""
 
         except subprocess.TimeoutExpired:
-            self.notify("Command timed out", severity="error")
-        except FileNotFoundError as e:
-            self.notify(f"Command not found: {e.filename}", severity="error")
+            self.notify("tmux command timed out", severity="error")
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
@@ -481,26 +466,11 @@ class GroveApp(App):
 
         # Clean up orphaned worktrees
         for worktree_name in orphaned_worktrees:
-            # Extract prefix from worktree name
-            prefix = ""
-            if "/" in worktree_name:
-                prefix = worktree_name.split("/")[0] + "/"
-
-            # Set environment variable and run worktree-manager remove command
-            env = os.environ.copy()
-            env["WORKTREE_PREFIX"] = prefix
-
             try:
-                # Run worktree-manager remove command
-                result = subprocess.run(
-                    ["worktree-manager", "remove", worktree_name],
-                    env=env,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
+                # Remove worktree using GitPython (will query git for the branch name)
+                success, error_msg = remove_worktree_with_branch(worktree_name)
 
-                if result.returncode == 0:
+                if success:
                     # Check if there's a tmux session with the same name and kill it
                     try:
                         session_check = subprocess.run(
@@ -520,14 +490,15 @@ class GroveApp(App):
                     except (FileNotFoundError, subprocess.SubprocessError):
                         pass
 
-                    self.notify(f"Auto-cleaned orphaned worktree: {worktree_name}", severity="information")
+                    if error_msg:
+                        self.notify(f"Auto-cleaned worktree {worktree_name}: {error_msg}", severity="warning")
+                    else:
+                        self.notify(f"Auto-cleaned orphaned worktree: {worktree_name}", severity="information")
                 else:
-                    self.notify(f"Failed to auto-clean worktree {worktree_name}: {result.stderr}", severity="warning")
+                    self.notify(f"Failed to auto-clean worktree {worktree_name}: {error_msg}", severity="warning")
 
             except subprocess.TimeoutExpired:
                 self.notify(f"Timeout cleaning worktree: {worktree_name}", severity="warning")
-            except FileNotFoundError:
-                self.notify("worktree-manager command not found", severity="warning")
             except Exception as e:
                 self.notify(f"Error cleaning worktree {worktree_name}: {str(e)}", severity="warning")
 
