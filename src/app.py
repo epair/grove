@@ -252,7 +252,7 @@ class GroveApp(App):
             # Prepare the gh pr create command
             pr_body_file = worktree_root / ".grove" / "metadata" / self.selected_worktree / "pr.md"
 
-            gh_command: list[str] = ['gh', '-R', '.', 'pr', 'create', '--title', pr_title]
+            gh_command: list[str] = ['gh', 'pr', 'create', '--title', pr_title]
 
             # Add body file if it exists
             if pr_body_file.exists():
