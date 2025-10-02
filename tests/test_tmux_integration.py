@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch, MagicMock
-from subprocess import CompletedProcess
 
 import pytest
 from textual.widgets import ListView, ListItem, Label
@@ -14,40 +13,41 @@ from src import GroveApp, get_active_tmux_sessions
 class TestTmuxIntegration:
     """Tests for tmux session integration."""
 
-    @patch('src.utils.subprocess.run')
-    def test_get_active_tmux_sessions_success(self, mock_run: Any) -> None:
-        """Test that get_active_tmux_sessions correctly parses tmux output."""
-        # Mock successful tmux command with session output
-        mock_run.return_value = CompletedProcess(
-            args=['tmux', 'list-sessions', '-F', '#{session_name}'],
-            returncode=0,
-            stdout='session1\nsession2\nfeature-one\n',
-            stderr=''
-        )
+    @patch('src.utils.get_tmux_server')
+    def test_get_active_tmux_sessions_success(self, mock_get_server: Any) -> None:
+        """Test that get_active_tmux_sessions correctly retrieves session names."""
+        # Mock tmux server with sessions
+        mock_server = MagicMock()
+        mock_session1 = MagicMock()
+        mock_session1.name = 'session1'
+        mock_session2 = MagicMock()
+        mock_session2.name = 'session2'
+        mock_session3 = MagicMock()
+        mock_session3.name = 'feature-one'
+
+        mock_server.sessions = [mock_session1, mock_session2, mock_session3]
+        mock_get_server.return_value = mock_server
 
         sessions = get_active_tmux_sessions()
         expected_sessions = {'session1', 'session2', 'feature-one'}
         assert sessions == expected_sessions
 
-    @patch('src.utils.subprocess.run')
-    def test_get_active_tmux_sessions_no_sessions(self, mock_run: Any) -> None:
+    @patch('src.utils.get_tmux_server')
+    def test_get_active_tmux_sessions_no_sessions(self, mock_get_server: Any) -> None:
         """Test that get_active_tmux_sessions handles no sessions gracefully."""
-        # Mock tmux command with no sessions (returns empty output)
-        mock_run.return_value = CompletedProcess(
-            args=['tmux', 'list-sessions', '-F', '#{session_name}'],
-            returncode=1,
-            stdout='',
-            stderr='no server running on /tmp/tmux-501/default'
-        )
+        # Mock tmux server with no sessions
+        mock_server = MagicMock()
+        mock_server.sessions = []
+        mock_get_server.return_value = mock_server
 
         sessions = get_active_tmux_sessions()
         assert sessions == set()
 
-    @patch('src.utils.subprocess.run')
-    def test_get_active_tmux_sessions_tmux_not_found(self, mock_run: Any) -> None:
-        """Test that get_active_tmux_sessions handles tmux not being installed."""
-        # Mock FileNotFoundError when tmux is not installed
-        mock_run.side_effect = FileNotFoundError("tmux command not found")
+    @patch('src.utils.get_tmux_server')
+    def test_get_active_tmux_sessions_tmux_not_found(self, mock_get_server: Any) -> None:
+        """Test that get_active_tmux_sessions handles tmux not being available."""
+        # Mock server not available
+        mock_get_server.return_value = None
 
         sessions = get_active_tmux_sessions()
         assert sessions == set()

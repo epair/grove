@@ -119,13 +119,15 @@ class TestWorktreeCreation:
             # Verify we're still on the form screen (validation prevented submission)
             assert isinstance(app.screen, WorktreeFormScreen)
 
-    @patch('src.app.subprocess.run')
+    @patch('src.app.create_or_switch_to_session')
+    @patch('src.app.create_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_create_button_with_valid_data(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    async def test_create_button_with_valid_data(self, mock_sessions: Any, mock_create_worktree: Any, mock_create_or_switch: Any, change_to_example_repo: Path) -> None:
         """Test that create button submits form with valid data."""
         mock_sessions.return_value = set()
-        # Mock successful subprocess calls
-        mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+        # Mock successful worktree and session creation
+        mock_create_worktree.return_value = (True, "")
+        mock_create_or_switch.return_value = (True, "")
 
         app = GroveApp()
 
@@ -149,16 +151,19 @@ class TestWorktreeCreation:
             await pilot.click("#create_button")
             await pilot.pause()
 
-            # Verify subprocess was called (form was submitted)
-            assert mock_subprocess.called
+            # Verify create functions were called (form was submitted)
+            assert mock_create_worktree.called
+            assert mock_create_or_switch.called
 
-    @patch('src.app.subprocess.run')
+    @patch('src.app.create_or_switch_to_session')
+    @patch('src.app.create_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_enter_key_in_name_field_submits_form(self, mock_sessions: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+    async def test_enter_key_in_name_field_submits_form(self, mock_sessions: Any, mock_create_worktree: Any, mock_create_or_switch: Any, change_to_example_repo: Path) -> None:
         """Test that pressing Enter in name field submits the form."""
         mock_sessions.return_value = set()
-        # Mock successful subprocess calls
-        mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+        # Mock successful worktree and session creation
+        mock_create_worktree.return_value = (True, "")
+        mock_create_or_switch.return_value = (True, "")
 
         app = GroveApp()
 
@@ -183,21 +188,22 @@ class TestWorktreeCreation:
             await pilot.press("enter")
             await pilot.pause()
 
-            # Verify subprocess was called (form was submitted)
-            assert mock_subprocess.called
+            # Verify create functions were called (form was submitted)
+            assert mock_create_worktree.called
+            assert mock_create_or_switch.called
 
-    @patch('src.app.subprocess.run')
+    @patch('src.app.create_or_switch_to_session')
     @patch('src.app.create_worktree_with_branch')
     @patch('src.utils.get_active_tmux_sessions')
-    async def test_worktree_creation_subprocess_calls(self, mock_sessions: Any, mock_create_worktree: Any, mock_subprocess: Any, change_to_example_repo: Path) -> None:
-        """Test that worktree creation makes correct GitPython calls."""
+    async def test_worktree_creation_subprocess_calls(self, mock_sessions: Any, mock_create_worktree: Any, mock_create_or_switch: Any, change_to_example_repo: Path) -> None:
+        """Test that worktree creation makes correct calls."""
         mock_sessions.return_value = set()
 
         # Mock successful worktree creation
         mock_create_worktree.return_value = (True, "")
 
-        # Mock successful tmux-sessionizer command
-        mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+        # Mock successful session creation/switch
+        mock_create_or_switch.return_value = (True, "")
 
         app = GroveApp()
 
@@ -219,18 +225,10 @@ class TestWorktreeCreation:
             # Verify create_worktree_with_branch was called with correct parameters
             mock_create_worktree.assert_called_once_with("test-feature", "ep/")
 
-            # Verify tmux-sessionizer call
-            assert mock_subprocess.call_count >= 1
-            # Find the tmux-sessionizer call (there may be other tmux calls)
-            tmux_call = None
-            for call in mock_subprocess.call_args_list:
-                if call[0][0][0] == "tmux-sessionizer":
-                    tmux_call = call
-                    break
-
-            assert tmux_call is not None
-            expected_path = str(Path.cwd() / "test-feature")
-            assert tmux_call[0][0] == ["tmux-sessionizer", expected_path]
+            # Verify create_or_switch_to_session was called
+            assert mock_create_or_switch.call_count == 1
+            expected_path = Path.cwd() / "test-feature"
+            mock_create_or_switch.assert_called_once_with(expected_path)
 
             # Verify app exit was called on success
             assert exit_called is True

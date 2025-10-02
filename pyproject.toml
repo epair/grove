@@ -21,6 +21,7 @@ packages = [{include = "src"}, {include = "*.tcss"}]
 python = "^3.13"
 textual = "^6.0.0"
 gitpython = "^3.1.0"
+libtmux = "^0.46.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"

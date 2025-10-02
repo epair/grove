@@ -16,7 +16,10 @@ from .utils import (
     get_worktree_pr_status,
     check_remote_branch_exists,
     create_worktree_with_branch,
-    remove_worktree_with_branch
+    remove_worktree_with_branch,
+    create_or_switch_to_session,
+    get_tmux_server,
+    session_exists
 )
 
 
@@ -97,25 +100,16 @@ class GroveApp(App):
                 self.notify("Could not find worktree root directory", severity="error")
                 return
 
-            # Run tmux-sessionizer command
+            # Create or switch to tmux session
             worktree_path = worktree_root / name
-            sessionizer_result = subprocess.run(
-                ["tmux-sessionizer", str(worktree_path)],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+            success, error_msg = create_or_switch_to_session(worktree_path)
 
-            if sessionizer_result.returncode == 0:
+            if success:
                 # Success - exit the application
                 self.exit()
             else:
-                self.notify(f"Worktree created but failed to start tmux session: {sessionizer_result.stderr}", severity="warning")
+                self.notify(f"Worktree created but failed to start tmux session: {error_msg}", severity="warning")
 
-        except subprocess.TimeoutExpired:
-            self.notify("tmux-sessionizer command timed out", severity="error")
-        except FileNotFoundError:
-            self.notify("tmux-sessionizer command not found", severity="error")
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
@@ -141,37 +135,31 @@ class GroveApp(App):
 
             # Check if there's a tmux session with the same name and kill it
             try:
-                # Check if session exists first
-                session_check = subprocess.run(
-                    ['tmux', 'has-session', '-t', worktree_name],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-
-                if session_check.returncode == 0:
+                server = get_tmux_server()
+                if server and session_exists(server, worktree_name):
                     # Session exists, kill it
-                    kill_result = subprocess.run(
-                        ['tmux', 'kill-session', '-t', worktree_name],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
-                    )
-
-                    if kill_result.returncode == 0:
-                        if has_branch_warning:
-                            self.notify(error_msg, severity="warning")
+                    try:
+                        found_sessions = server.sessions.filter(session_name=worktree_name)
+                        if found_sessions:
+                            found_sessions[0].kill_session()
+                            if has_branch_warning:
+                                self.notify(error_msg, severity="warning")
+                            else:
+                                self.notify(f"Worktree '{worktree_name}' and its tmux session deleted successfully", severity="information")
                         else:
-                            self.notify(f"Worktree '{worktree_name}' and its tmux session deleted successfully", severity="information")
-                    else:
-                        self.notify(f"Worktree deleted but failed to kill tmux session: {kill_result.stderr}", severity="warning")
+                            if has_branch_warning:
+                                self.notify(error_msg, severity="warning")
+                            else:
+                                self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+                    except Exception:
+                        self.notify(f"Worktree deleted but failed to kill tmux session", severity="warning")
                 else:
                     if has_branch_warning:
                         self.notify(error_msg, severity="warning")
                     else:
                         self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
 
-            except (FileNotFoundError, subprocess.SubprocessError):
+            except Exception:
                 # tmux not available or other error, but worktree was deleted successfully
                 if has_branch_warning:
                     self.notify(error_msg, severity="warning")
@@ -182,12 +170,12 @@ class GroveApp(App):
             sidebar = self.query_one("#sidebar", Sidebar)
             sidebar.clear()
             directories = get_worktree_directories()
-            sessions = get_active_tmux_sessions()
+            active_sessions = get_active_tmux_sessions()
             pr_worktrees = get_worktree_pr_status()
 
             if directories:
                 for directory in directories:
-                    icon = "●" if directory in sessions else "○"
+                    icon = "●" if directory in active_sessions else "○"
                     pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
                     sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
             else:
@@ -197,8 +185,6 @@ class GroveApp(App):
             if self.selected_worktree == worktree_name:
                 self.selected_worktree = ""
 
-        except subprocess.TimeoutExpired:
-            self.notify("tmux command timed out", severity="error")
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
@@ -404,27 +390,14 @@ class GroveApp(App):
             self.notify(f"Worktree directory not found: {self.selected_worktree}", severity="error")
             return
 
-        try:
-            # Run tmux-sessionizer command to switch to the session
-            result = subprocess.run(
-                ["tmux-sessionizer", str(worktree_path)],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
+        # Create or switch to tmux session
+        success, error_msg = create_or_switch_to_session(worktree_path)
 
-            if result.returncode == 0:
-                # Success - exit the application
-                self.exit()
-            else:
-                self.notify(f"Failed to switch to tmux session: {result.stderr}", severity="error")
-
-        except subprocess.TimeoutExpired:
-            self.notify("Command timed out", severity="error")
-        except FileNotFoundError:
-            self.notify("tmux-sessionizer command not found", severity="error")
-        except Exception as e:
-            self.notify(f"Unexpected error: {str(e)}", severity="error")
+        if success:
+            # Success - exit the application
+            self.exit()
+        else:
+            self.notify(f"Failed to switch to tmux session: {error_msg}", severity="error")
 
     def watch_selected_worktree(self, selected_worktree: str) -> None:
         """Update metadata display when selected worktree changes."""
@@ -473,21 +446,12 @@ class GroveApp(App):
                 if success:
                     # Check if there's a tmux session with the same name and kill it
                     try:
-                        session_check = subprocess.run(
-                            ['tmux', 'has-session', '-t', worktree_name],
-                            capture_output=True,
-                            text=True,
-                            check=False
-                        )
-
-                        if session_check.returncode == 0:
-                            subprocess.run(
-                                ['tmux', 'kill-session', '-t', worktree_name],
-                                capture_output=True,
-                                text=True,
-                                timeout=10
-                            )
-                    except (FileNotFoundError, subprocess.SubprocessError):
+                        server = get_tmux_server()
+                        if server and session_exists(server, worktree_name):
+                            found_sessions = server.sessions.filter(session_name=worktree_name)
+                            if found_sessions:
+                                found_sessions[0].kill_session()
+                    except Exception:
                         pass
 
                     if error_msg:
@@ -497,8 +461,6 @@ class GroveApp(App):
                 else:
                     self.notify(f"Failed to auto-clean worktree {worktree_name}: {error_msg}", severity="warning")
 
-            except subprocess.TimeoutExpired:
-                self.notify(f"Timeout cleaning worktree: {worktree_name}", severity="warning")
             except Exception as e:
                 self.notify(f"Error cleaning worktree {worktree_name}: {str(e)}", severity="warning")
 
@@ -507,12 +469,12 @@ class GroveApp(App):
             sidebar = self.query_one("#sidebar", Sidebar)
             sidebar.clear()
             directories = get_worktree_directories()
-            sessions = get_active_tmux_sessions()
+            active_sessions = get_active_tmux_sessions()
             pr_worktrees = get_worktree_pr_status()
 
             if directories:
                 for directory in directories:
-                    icon = "●" if directory in sessions else "○"
+                    icon = "●" if directory in active_sessions else "○"
                     pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
                     sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
             else:

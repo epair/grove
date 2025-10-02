@@ -1,9 +1,11 @@
 """Utility functions for Git worktree and tmux operations."""
 
+import os
 import subprocess
 from pathlib import Path
 from git import Repo
 from git.exc import GitCommandError
+import libtmux
 
 
 def is_bare_git_repository() -> bool:
@@ -33,6 +35,94 @@ def get_bare_parent() -> Path | None:
 
     return bare_parent
 
+def get_tmux_server() -> libtmux.Server | None:
+    """Get tmux server instance with error handling."""
+    try:
+        return libtmux.Server()
+    except Exception:
+        return None
+
+def is_inside_tmux() -> bool:
+    """Check if we're currently inside a tmux session."""
+    return os.environ.get('TMUX') is not None
+
+def session_exists(server: libtmux.Server, session_name: str) -> bool:
+    """Check if a tmux session with the given name exists."""
+    try:
+        sessions = server.sessions.filter(session_name=session_name)
+        return len(sessions) > 0
+    except Exception:
+        return False
+
+def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
+    """Create or switch to a tmux session for a worktree (replaces tmux-sessionizer).
+
+    Args:
+        worktree_path: Path to the worktree directory
+
+    Returns:
+        Tuple of (success: bool, error_message: str)
+    """
+    try:
+        # Get tmux server
+        server = get_tmux_server()
+        if server is None:
+            return False, "Could not connect to tmux server"
+
+        # Create session name from path basename (replace dots with dashes)
+        session_name = worktree_path.name.replace('.', '-')
+
+        # Check if session already exists
+        if not session_exists(server, session_name):
+            # Create new session detached with working directory
+            session = server.new_session(
+                session_name=session_name,
+                start_directory=str(worktree_path),
+                attach=False
+            )
+
+            # Run session hydration if .tmux-sessionizer file exists
+            hydration_script = None
+            if (worktree_path / ".tmux-sessionizer").exists():
+                hydration_script = worktree_path / ".tmux-sessionizer"
+                script_dir = worktree_path
+            elif (worktree_path.parent / ".tmux-sessionizer").exists():
+                hydration_script = worktree_path.parent / ".tmux-sessionizer"
+                script_dir = worktree_path.parent
+            elif (Path.home() / ".tmux-sessionizer").exists():
+                hydration_script = Path.home() / ".tmux-sessionizer"
+                script_dir = Path.home()
+
+            if hydration_script:
+                try:
+                    # Run hydration script using tmux run-shell
+                    session.cmd(
+                        'run-shell',
+                        '-b',
+                        '-c', str(script_dir),
+                        f"bash '.tmux-sessionizer' && tmux display-message -t '{session_name}' 'Session hydrated successfully' || tmux display-message -t '{session_name}' 'Session hydration failed'"
+                    )
+                except Exception:
+                    # Continue even if hydration fails
+                    pass
+        else:
+            # Get existing session
+            sessions = server.sessions.filter(session_name=session_name)
+            if not sessions:
+                return False, f"Session '{session_name}' not found"
+            session = sessions[0]
+
+        # Switch to the session (switch-client if inside tmux, attach if outside)
+        if is_inside_tmux():
+            session.switch_client()
+        else:
+            session.attach()
+
+        return True, ""
+
+    except Exception as e:
+        return False, f"Tmux error: {str(e)}"
+
 def get_worktree_directories() -> list[str]:
     """Get directories at the same level as .bare directory, excluding hidden directories."""
     bare_parent = get_bare_parent()
@@ -49,19 +139,14 @@ def get_worktree_directories() -> list[str]:
     return sorted(directories)
 
 def get_active_tmux_sessions() -> set[str]:
-    """Get names of all active tmux sessions using tmux format strings."""
+    """Get names of all active tmux sessions using libtmux."""
     try:
-        result = subprocess.run(
-            ['tmux', 'list-sessions', '-F', '#{session_name}'],
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            return set(result.stdout.strip().split('\n'))
-    except (FileNotFoundError, subprocess.SubprocessError):
-        pass
-    return set()
+        server = get_tmux_server()
+        if server is None:
+            return set()
+        return {session.name for session in server.sessions if session.name is not None}
+    except Exception:
+        return set()
 
 def get_worktree_pr_status() -> set[str]:
     """Get names of worktrees that have a PR published."""
