@@ -81,6 +81,37 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
                 attach=False
             )
 
+            # Open description.md in Neovim for new sessions
+            bare_parent = get_bare_parent()
+            if bare_parent:
+                # Create metadata directory structure if it doesn't exist
+                metadata_dir = bare_parent / ".grove" / "metadata" / session_name
+                metadata_dir.mkdir(parents=True, exist_ok=True)
+
+                # Create description.md with template if it doesn't exist
+                description_file = metadata_dir / "description.md"
+                if not description_file.exists():
+                    template = """# Description
+
+## What problem does this solve?
+
+
+## What are you building?
+
+
+## Additional context
+
+"""
+                    description_file.write_text(template)
+
+                # Open the description file in Neovim in the first pane
+                try:
+                    first_pane = session.windows[0].panes[0]
+                    first_pane.send_keys(f"nvim {description_file}")
+                except Exception:
+                    # Continue even if opening Neovim fails
+                    pass
+
             # Run session hydration if .tmux-sessionizer file exists
             hydration_script = None
             if (worktree_path / ".tmux-sessionizer").exists():
