@@ -130,10 +130,11 @@ class GroveApp(App):
                 self.notify(f"Failed to delete worktree: {error_msg}", severity="error")
                 return
 
-            # Check if there's a warning about branch deletion
-            has_branch_warning = bool(error_msg)
+            # Check if there's a warning message (branch deletion, Docker cleanup, etc.)
+            has_warning = bool(error_msg)
 
             # Check if there's a tmux session with the same name and kill it
+            tmux_killed = False
             try:
                 server = get_tmux_server()
                 if server and session_exists(server, worktree_name):
@@ -142,29 +143,41 @@ class GroveApp(App):
                         found_sessions = server.sessions.filter(session_name=worktree_name)
                         if found_sessions:
                             found_sessions[0].kill_session()
-                            if has_branch_warning:
-                                self.notify(error_msg, severity="warning")
-                            else:
-                                self.notify(f"Worktree '{worktree_name}' and its tmux session deleted successfully", severity="information")
-                        else:
-                            if has_branch_warning:
-                                self.notify(error_msg, severity="warning")
-                            else:
-                                self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+                            tmux_killed = True
                     except Exception:
-                        self.notify(f"Worktree deleted but failed to kill tmux session", severity="warning")
-                else:
-                    if has_branch_warning:
-                        self.notify(error_msg, severity="warning")
-                    else:
-                        self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
-
+                        if has_warning:
+                            self.notify(f"{error_msg} Worktree deleted but failed to kill tmux session", severity="warning")
+                        else:
+                            self.notify(f"Worktree deleted but failed to kill tmux session", severity="warning")
+                        # Refresh sidebar and return early
+                        sidebar = self.query_one("#sidebar", Sidebar)
+                        sidebar.clear()
+                        directories = get_worktree_directories()
+                        active_sessions = get_active_tmux_sessions()
+                        pr_worktrees = get_worktree_pr_status()
+                        if directories:
+                            for directory in directories:
+                                icon = "●" if directory in active_sessions else "○"
+                                pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
+                                sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
+                        else:
+                            sidebar.append(ListItem(Label("No directories found")))
+                        if self.selected_worktree == worktree_name:
+                            self.selected_worktree = ""
+                        return
             except Exception:
-                # tmux not available or other error, but worktree was deleted successfully
-                if has_branch_warning:
-                    self.notify(error_msg, severity="warning")
-                else:
-                    self.notify(f"Worktree '{worktree_name}' deleted successfully", severity="information")
+                # tmux not available or other error
+                pass
+
+            # Build success message
+            if has_warning:
+                self.notify(error_msg, severity="warning")
+            else:
+                success_msg = f"Worktree '{worktree_name}'"
+                if tmux_killed:
+                    success_msg += " and its tmux session"
+                success_msg += " deleted successfully"
+                self.notify(success_msg, severity="information")
 
             # Refresh the sidebar by recreating it
             sidebar = self.query_one("#sidebar", Sidebar)

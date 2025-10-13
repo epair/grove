@@ -369,6 +369,31 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
     worktree_dir = bare_parent / worktree_dir_name
 
     try:
+        # Stop Docker containers if stop script exists
+        docker_stop_script = worktree_dir / "bin" / "docker" / "stop"
+        docker_stop_warning = None
+
+        if docker_stop_script.exists() and docker_stop_script.is_file():
+            try:
+                # Run the Docker stop script from the worktree directory
+                stop_result = subprocess.run(
+                    [str(docker_stop_script)],
+                    cwd=str(worktree_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+
+                # Note: We don't check returncode because the script may exit non-zero
+                # but we still want to continue with worktree deletion
+                if stop_result.returncode != 0 and stop_result.stderr:
+                    docker_stop_warning = f"Docker cleanup had warnings: {stop_result.stderr.strip()}"
+
+            except subprocess.TimeoutExpired:
+                docker_stop_warning = "Docker cleanup timed out after 60 seconds"
+            except Exception as e:
+                docker_stop_warning = f"Docker cleanup failed: {str(e)}"
+
         # Open the bare repository
         repo = Repo(str(bare_repo_path))
 
@@ -422,9 +447,16 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
                 # Capture error but don't fail the whole operation
                 branch_error = str(e)
 
-        # Return success for worktree removal, but include branch deletion warning if any
+        # Build the final message with all warnings
+        warnings = []
+        if docker_stop_warning:
+            warnings.append(docker_stop_warning)
         if branch_error:
-            return True, f"Worktree removed but branch deletion failed: {branch_error}"
+            warnings.append(f"Branch deletion failed: {branch_error}")
+
+        # Return success for worktree removal, but include warnings if any
+        if warnings:
+            return True, "Worktree removed. " + " ".join(warnings)
 
         return True, ""
 
