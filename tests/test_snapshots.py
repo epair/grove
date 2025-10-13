@@ -125,14 +125,14 @@ class TestSnapshots:
             """Open form, enter some text, then take snapshot."""
             await pilot.press("n")
             await pilot.pause()
-            # Focus is already on prefix input, type there
-            await pilot.press(*list("custom-prefix/"))
+            # Focus is already on name input, type there
+            await pilot.press(*list("my-feature"))
             await pilot.pause()
-            # Tab to name input
+            # Tab to prefix input
             await pilot.press("tab")
             await pilot.pause()
-            # Type the name
-            await pilot.press(*list("my-feature"))
+            # Type the prefix
+            await pilot.press(*list("custom-prefix/"))
             await pilot.pause()
 
         assert snap_compare(app, terminal_size=(120, 40), run_before=run_before)

@@ -15,10 +15,10 @@ class WorktreeFormScreen(ModalScreen[dict[str, str] | None]):
         """Create the form layout."""
         with Vertical(id="dialog"):
             yield Label("Create New Worktree", id="title")
-            yield Label("Prefix:")
-            yield Input(value="ep/", placeholder="ep/", id="prefix_input")
             yield Label("Name:")
             yield Input(placeholder="Enter worktree name", id="name_input")
+            yield Label("Prefix:")
+            yield Input(value="ep/", placeholder="ep/", id="prefix_input")
             with Horizontal(id="worktree_button_container"):
                 yield Button("Cancel", variant="default", id="cancel_button")
                 yield Button("Create", variant="primary", id="create_button")
