@@ -502,3 +502,214 @@ class TestWorktreeDeletion:
 
             # Verify remove_worktree_with_branch was called
             mock_remove_worktree.assert_called_once_with("simple-feature")
+
+
+class TestDockerCleanupInWorktreeDeletion:
+    """Tests for Docker container cleanup during worktree deletion."""
+
+    @patch('src.utils.subprocess.run')
+    def test_remove_worktree_runs_docker_stop_script_when_present(self, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+        """Test that remove_worktree_with_branch runs docker stop script if it exists."""
+        # Create a test worktree with docker stop script
+        bare_parent = Path(change_to_example_repo)
+        worktree_dir = bare_parent / "test-docker-worktree"
+        worktree_dir.mkdir(exist_ok=True)
+
+        try:
+            # Create bin/docker/stop script
+            docker_bin_dir = worktree_dir / "bin" / "docker"
+            docker_bin_dir.mkdir(parents=True, exist_ok=True)
+            stop_script = docker_bin_dir / "stop"
+            stop_script.write_text("#!/bin/bash\necho 'Stopping containers'")
+            stop_script.chmod(0o755)
+
+            # Mock subprocess.run to simulate successful stop script execution
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stderr = ""
+            mock_subprocess.return_value = mock_result
+
+            # Import here to use the patched subprocess
+            from src.utils import remove_worktree_with_branch
+
+            # Attempt to remove the worktree (will fail because it's not a real git worktree)
+            # but we just want to verify the stop script was called
+            try:
+                remove_worktree_with_branch("test-docker-worktree")
+            except Exception:
+                pass
+
+            # Verify subprocess.run was called with the stop script
+            assert mock_subprocess.called
+            call_args = mock_subprocess.call_args
+            assert str(stop_script) in str(call_args[0][0])
+            assert call_args[1]['cwd'] == str(worktree_dir)
+            assert call_args[1]['timeout'] == 60
+        finally:
+            # Clean up test directory
+            import shutil
+            if worktree_dir.exists():
+                shutil.rmtree(worktree_dir)
+
+    @patch('src.utils.subprocess.run')
+    def test_remove_worktree_handles_docker_stop_script_timeout(self, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+        """Test that remove_worktree_with_branch handles docker stop script timeout."""
+        # Create a test worktree with docker stop script
+        bare_parent = Path(change_to_example_repo)
+        worktree_dir = bare_parent / "test-timeout-worktree"
+        worktree_dir.mkdir(exist_ok=True)
+
+        try:
+            # Create bin/docker/stop script
+            docker_bin_dir = worktree_dir / "bin" / "docker"
+            docker_bin_dir.mkdir(parents=True, exist_ok=True)
+            stop_script = docker_bin_dir / "stop"
+            stop_script.write_text("#!/bin/bash\nsleep 100")
+            stop_script.chmod(0o755)
+
+            # Mock subprocess.run to raise TimeoutExpired
+            import subprocess
+            mock_subprocess.side_effect = subprocess.TimeoutExpired(cmd=str(stop_script), timeout=60)
+
+            # Import here to use the patched subprocess
+            from src.utils import remove_worktree_with_branch
+
+            # Attempt to remove the worktree
+            # Should continue with deletion even though stop script timed out
+            try:
+                success, error_msg = remove_worktree_with_branch("test-timeout-worktree")
+                # Check that timeout warning is in the message
+                assert "timed out" in error_msg.lower() or success
+            except Exception:
+                # Expected to fail since it's not a real worktree, but stop script should have been attempted
+                pass
+
+            # Verify subprocess.run was called
+            assert mock_subprocess.called
+        finally:
+            # Clean up test directory
+            import shutil
+            if worktree_dir.exists():
+                shutil.rmtree(worktree_dir)
+
+    @patch('src.utils.subprocess.run')
+    def test_remove_worktree_handles_docker_stop_script_failure(self, mock_subprocess: Any, change_to_example_repo: Path) -> None:
+        """Test that remove_worktree_with_branch handles docker stop script failures."""
+        # Create a test worktree with docker stop script
+        bare_parent = Path(change_to_example_repo)
+        worktree_dir = bare_parent / "test-failure-worktree"
+        worktree_dir.mkdir(exist_ok=True)
+
+        try:
+            # Create bin/docker/stop script
+            docker_bin_dir = worktree_dir / "bin" / "docker"
+            docker_bin_dir.mkdir(parents=True, exist_ok=True)
+            stop_script = docker_bin_dir / "stop"
+            stop_script.write_text("#!/bin/bash\nexit 1")
+            stop_script.chmod(0o755)
+
+            # Mock subprocess.run to simulate failed stop script execution
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stderr = "Error stopping containers"
+            mock_subprocess.return_value = mock_result
+
+            # Import here to use the patched subprocess
+            from src.utils import remove_worktree_with_branch
+
+            # Attempt to remove the worktree
+            try:
+                success, error_msg = remove_worktree_with_branch("test-failure-worktree")
+                # Check that warning is in the message if successful
+                if success and error_msg:
+                    assert "Docker cleanup" in error_msg or "warnings" in error_msg.lower()
+            except Exception:
+                # Expected to fail since it's not a real worktree
+                pass
+
+            # Verify subprocess.run was called
+            assert mock_subprocess.called
+        finally:
+            # Clean up test directory
+            import shutil
+            if worktree_dir.exists():
+                shutil.rmtree(worktree_dir)
+
+    def test_remove_worktree_skips_docker_stop_when_script_missing(self, change_to_example_repo: Path) -> None:
+        """Test that remove_worktree_with_branch skips docker cleanup when stop script doesn't exist."""
+        # Create a test worktree WITHOUT docker stop script
+        bare_parent = Path(change_to_example_repo)
+        worktree_dir = bare_parent / "test-no-docker-worktree"
+        worktree_dir.mkdir(exist_ok=True)
+
+        try:
+            # Import and call remove_worktree_with_branch
+            from src.utils import remove_worktree_with_branch
+
+            # Attempt to remove the worktree (will fail because it's not a real git worktree)
+            # but should not attempt to run docker stop script
+            try:
+                success, error_msg = remove_worktree_with_branch("test-no-docker-worktree")
+                # If it succeeds or returns an error, Docker cleanup should not be mentioned
+                # (unless there are other warnings like branch deletion)
+                if "Docker" in error_msg:
+                    pytest.fail("Docker cleanup should not run when script is missing")
+            except Exception:
+                # Expected to fail since it's not a real worktree, but that's fine
+                pass
+        finally:
+            # Clean up test directory
+            import shutil
+            if worktree_dir.exists():
+                shutil.rmtree(worktree_dir)
+
+    @patch('src.widgets.get_worktree_pr_status')
+    @patch('src.widgets.get_active_tmux_sessions')
+    @patch('src.app.get_worktree_directories')
+    @patch('src.app.get_worktree_pr_status')
+    @patch('src.app.get_active_tmux_sessions')
+    @patch('src.app.get_tmux_server')
+    @patch('src.app.session_exists')
+    @patch('src.app.remove_worktree_with_branch')
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_worktree_deletion_displays_docker_cleanup_warning(self, mock_sessions: Any, mock_remove_worktree: Any, mock_session_exists: Any, mock_get_server: Any, mock_app_sessions: Any, mock_app_pr: Any, mock_app_dirs: Any, mock_widgets_sessions: Any, mock_widgets_pr: Any, change_to_example_repo: Path) -> None:
+        """Test that worktree deletion displays Docker cleanup warnings in notifications."""
+        mock_sessions.return_value = set()
+        mock_app_sessions.return_value = set()
+        mock_app_pr.return_value = set()
+        mock_app_dirs.return_value = []
+        mock_widgets_sessions.return_value = set()
+        mock_widgets_pr.return_value = set()
+
+        # Mock worktree removal with Docker cleanup warning
+        mock_remove_worktree.return_value = (True, "Worktree removed. Docker cleanup had warnings: Container not found")
+
+        # Mock tmux server where session doesn't exist
+        mock_server = MagicMock()
+        mock_get_server.return_value = mock_server
+        mock_session_exists.return_value = False
+
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            app.selected_worktree = "test-feature"
+
+            # Mock notifications to track messages
+            notifications = []
+            def mock_notify(message: str, severity: str = "information", **kwargs: Any) -> None:
+                notifications.append((message, severity))
+
+            app.notify = MagicMock(side_effect=mock_notify)
+
+            # Mock sidebar operations
+            sidebar = app.query_one("#sidebar", ListView)
+            sidebar.clear = MagicMock()
+            sidebar.append = MagicMock()
+
+            # Call deletion handler with confirmation
+            app.handle_worktree_deletion(True)
+
+            # Verify warning notification was shown
+            assert len(notifications) == 1
+            assert "Docker cleanup" in notifications[0][0]
+            assert notifications[0][1] == "warning"

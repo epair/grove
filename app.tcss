@@ -35,14 +35,21 @@ WorktreeFormScreen {
     margin-bottom: 1;
 }
 
-#create_button, #cancel_button {
-    margin: 0 1;
+#cancel_button {
+    margin-right: 2;
     min-width: 10;
 }
 
-/* Ensure buttons are visible and properly spaced */
-Center {
+#create_button {
+    min-width: 10;
+}
+
+/* Horizontal button containers with right alignment */
+#worktree_button_container {
+    width: 100%;
     margin-top: 1;
+    padding: 0 1;
+    align-horizontal: right;
 }
 
 /* Delete confirmation dialog styling */
@@ -77,9 +84,20 @@ ConfirmDeleteScreen {
     text-style: italic;
 }
 
-#yes_button, #no_button {
-    margin: 0 1;
+#no_button {
+    margin-right: 2;
     min-width: 10;
+}
+
+#yes_button {
+    min-width: 10;
+}
+
+#delete_button_container {
+    width: 100%;
+    margin-top: 1;
+    padding: 0 1;
+    align-horizontal: right;
 }
 
 /* PR form modal styling */
@@ -120,7 +138,18 @@ PRFormScreen {
     padding: 0 1;
 }
 
-#create_pr_button, #cancel_pr_button {
-    margin: 0 1;
+#cancel_pr_button {
+    margin-right: 2;
     min-width: 12;
+}
+
+#create_pr_button {
+    min-width: 12;
+}
+
+#pr_button_container {
+    width: 100%;
+    margin-top: 1;
+    padding: 0 1;
+    align-horizontal: right;
 }

@@ -19,9 +19,9 @@ class WorktreeFormScreen(ModalScreen[dict[str, str] | None]):
             yield Input(value="ep/", placeholder="ep/", id="prefix_input")
             yield Label("Name:")
             yield Input(placeholder="Enter worktree name", id="name_input")
-            with Center():
-                yield Button("Create", variant="primary", id="create_button")
+            with Horizontal(id="worktree_button_container"):
                 yield Button("Cancel", variant="default", id="cancel_button")
+                yield Button("Create", variant="primary", id="create_button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
@@ -70,9 +70,9 @@ class ConfirmDeleteScreen(ModalScreen[bool]):
             yield Label("Delete Worktree", id="delete_title")
             yield Label(f"Are you sure you want to delete '{self.worktree_name}'?", id="delete_message")
             yield Label("This action cannot be undone.", id="delete_warning")
-            with Center():
-                yield Button("Yes (y)", variant="error", id="yes_button")
+            with Horizontal(id="delete_button_container"):
                 yield Button("No (n)", variant="default", id="no_button")
+                yield Button("Yes (y)", variant="error", id="yes_button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
@@ -114,9 +114,9 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
                     yield Checkbox("neddenriep", id="checkbox_neddenriep")
                     yield Checkbox("gorilla076", id="checkbox_gorilla076")
 
-            with Center():
-                yield Button("Create PR", variant="primary", id="create_pr_button")
+            with Horizontal(id="pr_button_container"):
                 yield Button("Cancel", variant="default", id="cancel_pr_button")
+                yield Button("Create PR", variant="primary", id="create_pr_button")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""

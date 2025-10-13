@@ -78,6 +78,18 @@ MarkupSafe = ">=2.0"
 i18n = ["Babel (>=2.7)"]
 
 [[package]]
+name = "libtmux"
+version = "0.46.2"
+description = "Typed library that provides an ORM wrapper for tmux, a terminal multiplexer."
+optional = false
+python-versions = "<4.0,>=3.9"
+groups = ["main"]
+files = [
+    {file = "libtmux-0.46.2-py3-none-any.whl", hash = "sha256:6c32dbf22bde8e5e33b2714a4295f6e838dc640f337cd4c085a044f6828c7793"},
+    {file = "libtmux-0.46.2.tar.gz", hash = "sha256:9a398fec5d714129c8344555d466e1a903dfc0f741ba07aabe75a8ceb25c5dda"},
+]
+
+[[package]]
 name = "linkify-it-py"
 version = "2.0.3"
 description = "Links recognition library with FULL unicode support."
@@ -557,4 +569,4 @@ test = ["coverage", "pytest", "pytest-cov"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.13"
-content-hash = "57ac8e9511775823aaee9317243fe692a8884f2b12edfb2e157f20e4eaaac3de"
+content-hash = "6a5ac0a49e52b9cdb55ecbf6120a28c99d2c9a0dff144623f005bc599d2ce466"
