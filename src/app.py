@@ -20,7 +20,8 @@ from .utils import (
     remove_worktree_with_branch,
     create_or_switch_to_session,
     get_tmux_server,
-    session_exists
+    session_exists,
+    is_inside_tmux
 )
 
 
@@ -33,6 +34,7 @@ class GroveApp(App):
         ("n", "new_worktree", "New worktree"),
         ("d", "delete_worktree", "Delete worktree"),
         ("p", "create_pr", "Create PR"),
+        ("e", "edit_metadata", "Edit metadata"),
         ("[", "previous_metadata_page", "Previous page"),
         ("]", "next_metadata_page", "Next page")
     ]
@@ -87,6 +89,105 @@ class GroveApp(App):
             return
 
         self.push_screen(PRFormScreen(), self.handle_pr_submission)
+
+    def action_edit_metadata(self) -> None:
+        """An action to edit the currently visible metadata file in neovim."""
+        if not self.selected_worktree:
+            self.notify("No worktree selected", severity="warning")
+            return
+
+        # Get worktree root directory
+        current_path = Path.cwd()
+        worktree_root = None
+
+        if (current_path / ".bare").is_dir():
+            worktree_root = current_path
+        elif (current_path.parent / ".bare").is_dir():
+            worktree_root = current_path.parent
+
+        if worktree_root is None:
+            self.notify("Could not find worktree root directory", severity="error")
+            return
+
+        # Map current page to filename
+        page_to_file = {
+            0: "description.md",
+            1: "pr.md",
+            2: "notes.md"
+        }
+        filename = page_to_file.get(self.current_metadata_page, "description.md")
+
+        # Construct metadata file path
+        metadata_dir = worktree_root / ".grove" / "metadata" / self.selected_worktree
+        metadata_file = metadata_dir / filename
+
+        # Ensure metadata directory exists
+        metadata_dir.mkdir(parents=True, exist_ok=True)
+
+        # Ensure metadata file exists (create with template if needed)
+        if not metadata_file.exists():
+            if filename == "description.md":
+                metadata_file.write_text("What are you building?")
+            elif filename == "pr.md":
+                metadata_file.write_text("# Pull Request\n\n")
+            elif filename == "notes.md":
+                metadata_file.write_text("# Notes\n\n")
+
+        # Get tmux server
+        server = get_tmux_server()
+        if server is None:
+            self.notify("Could not connect to tmux server", severity="error")
+            return
+
+        # Get or create session
+        session_name = self.selected_worktree.replace('.', '-')
+        worktree_path = worktree_root / self.selected_worktree
+
+        if not session_exists(server, session_name):
+            # Create session
+            try:
+                session = server.new_session(
+                    session_name=session_name,
+                    start_directory=str(worktree_path),
+                    attach=False
+                )
+            except Exception as e:
+                self.notify(f"Failed to create tmux session: {str(e)}", severity="error")
+                return
+        else:
+            # Get existing session
+            sessions = server.sessions.filter(session_name=session_name)
+            if not sessions:
+                self.notify(f"Session '{session_name}' not found", severity="error")
+                return
+            session = sessions[0]
+
+        # Create new window in session
+        try:
+            window_name = f"edit-{filename.replace('.md', '')}"
+            new_window = session.new_window(
+                window_name=window_name,
+                start_directory=str(worktree_path),
+                attach=False
+            )
+
+            # Open neovim in the new window (exit when neovim closes)
+            new_window.panes[0].send_keys(f"nvim {metadata_file}; exit")
+
+            # Select the new window (make it active)
+            new_window.select_window()
+
+            # Switch to the session
+            if is_inside_tmux():
+                session.switch_client()
+            else:
+                session.attach()
+
+            # Exit the app
+            self.exit()
+
+        except Exception as e:
+            self.notify(f"Failed to open file in tmux: {str(e)}", severity="error")
 
     def action_previous_metadata_page(self) -> None:
         """Navigate to the previous metadata page."""
