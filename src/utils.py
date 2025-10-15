@@ -92,17 +92,7 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
                 # Create description.md with template if it doesn't exist
                 description_file = metadata_dir / "description.md"
                 if not description_file.exists():
-                    template = """# Description
-
-## What problem does this solve?
-
-
-## What are you building?
-
-
-## Additional context
-
-"""
+                    template = "What are you building?"
                     description_file.write_text(template)
 
                 # Open the description file in Neovim in the first pane
