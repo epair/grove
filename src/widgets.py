@@ -1,16 +1,18 @@
 """Textual widgets for Grove application."""
 
+from typing import Any
 from textual.app import ComposeResult
-from textual.widgets import ListView, ListItem, Label, Markdown
+from textual.widgets import ListView, ListItem, Label, Markdown, Static
 from textual.widget import Widget
 from textual.binding import Binding
 from textual.reactive import reactive
-from textual.containers import VerticalScroll
+from textual.containers import VerticalScroll, Horizontal, Vertical
 from rich.text import Text
 from rich.console import RenderableType
 
 from .utils import get_worktree_directories, get_active_tmux_sessions, get_worktree_pr_status
 from .utils import get_worktree_metadata, get_worktree_git_info, get_worktree_git_status
+from .utils import get_tmux_pane_preview
 
 
 class Sidebar(ListView):
@@ -201,3 +203,91 @@ class MetadataBottomDisplay(Markdown):
         ])
 
         self.update("\n".join(content_parts))
+
+
+class WindowPreview(Widget):
+    """Widget to display a single tmux window's pane content."""
+
+    def __init__(self, window_data: dict[str, str | bool], **kwargs: Any) -> None:
+        """Initialize with window data."""
+        super().__init__(**kwargs)
+        self.window_data = window_data
+
+    def compose(self) -> ComposeResult:
+        """Compose the window preview with title and content."""
+        # Window title with index and name
+        window_index = self.window_data.get("window_index", "?")
+        window_name = self.window_data.get("window_name", "unknown")
+        is_active = self.window_data.get("is_active", False)
+
+        # Add an asterisk to indicate the active window
+        active_indicator = "*" if is_active else " "
+        title = f"{active_indicator}{window_index}: {window_name}"
+
+        yield Static(title, classes="window-title")
+        # Get content as string (we know it's always a string in our data structure)
+        content = str(self.window_data.get("content", ""))
+        yield WindowContent(content, classes="window-content")
+
+
+class WindowContent(Widget):
+    """Widget to render window pane content."""
+
+    def __init__(self, content: str, **kwargs: Any) -> None:
+        """Initialize with content."""
+        super().__init__(**kwargs)
+        self.content = content
+
+    def render(self) -> RenderableType:
+        """Render the window content."""
+        return Text(self.content, style="white on default", no_wrap=False, overflow="fold")
+
+
+class TmuxPanePreview(Widget):
+    """Widget to display live tmux pane preview content for all windows."""
+
+    worktree_name: reactive[str] = reactive("")
+
+    def compose(self) -> ComposeResult:
+        """Compose the initial empty state."""
+        yield Horizontal(id="windows-container")
+
+    def update_content(self, worktree_name: str) -> None:
+        """Update the display with pane preview for the given worktree."""
+        self.worktree_name = worktree_name
+
+    def watch_worktree_name(self, worktree_name: str) -> None:
+        """React to worktree name changes and rebuild the windows display."""
+        # Get the container
+        container = self.query_one("#windows-container", Horizontal)
+
+        # Clear existing windows
+        container.remove_children()
+
+        if not worktree_name:
+            # Show placeholder message
+            placeholder = Static("Select a worktree to view tmux pane preview", classes="preview-placeholder")
+            container.mount(placeholder)
+            return
+
+        # Get pane preview data
+        preview_data = get_tmux_pane_preview(worktree_name)
+
+        # Check if we got an error message string
+        if isinstance(preview_data, str):
+            # Show error/status message
+            if preview_data in ["Tmux not available", "No active tmux session", "No windows in session", "Empty pane"]:
+                placeholder = Static(preview_data, classes="preview-placeholder")
+            elif preview_data.startswith("Error capturing pane:"):
+                placeholder = Static(preview_data, classes="preview-error")
+            else:
+                placeholder = Static(preview_data, classes="preview-placeholder")
+
+            container.mount(placeholder)
+            return
+
+        # We have window data - create a preview for each window
+        if preview_data:
+            for window_data in preview_data:
+                window_preview = WindowPreview(window_data)
+                container.mount(window_preview)

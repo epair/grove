@@ -342,6 +342,99 @@ def get_worktree_git_status(worktree_name: str) -> dict[str, list[str]]:
     except Exception:
         return {"staged": [], "unstaged": [], "untracked": []}
 
+def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | str:
+    """Get tmux pane preview content for all windows in a worktree's active session.
+
+    Args:
+        worktree_name: The name of the worktree
+
+    Returns:
+        List of dictionaries with 'window_name', 'window_index', and 'content' keys,
+        or an error message string if something went wrong
+    """
+    if not worktree_name:
+        return ""
+
+    try:
+        # Get tmux server
+        server = get_tmux_server()
+        if server is None:
+            return "Tmux not available"
+
+        # Create session name from worktree name (replace dots with dashes)
+        session_name = worktree_name.replace('.', '-')
+
+        # Check if session exists
+        if not session_exists(server, session_name):
+            return "No active tmux session"
+
+        # Get the session
+        sessions = server.sessions.filter(session_name=session_name)
+        if not sessions:
+            return "No active tmux session"
+
+        session = sessions[0]
+
+        # Get all windows in the session
+        if not session.windows:
+            return "No windows in session"
+
+        windows_data = []
+
+        # Process each window
+        for window in session.windows:
+            window_name: str = str(window.window_name or f"window-{window.window_index}")
+            window_index: str = str(window.window_index or "0")
+            is_active: bool = window.window_active == '1'
+
+            # Get the active pane in this window
+            if not window.panes:
+                window_dict: dict[str, str | bool] = {
+                    "window_name": window_name,
+                    "window_index": window_index,
+                    "content": "No panes in window",
+                    "is_active": is_active
+                }
+                windows_data.append(window_dict)
+                continue
+
+            # Find the active pane
+            active_pane = None
+            for pane in window.panes:
+                if pane.pane_active == '1':
+                    active_pane = pane
+                    break
+
+            # If no active pane found, use the first pane
+            if active_pane is None:
+                active_pane = window.panes[0]
+
+            # Capture the pane content (visible portion)
+            # Use start='-' and end='-' to capture entire scrollback
+            try:
+                captured = active_pane.capture_pane(start='-', end='-')
+
+                # If captured is a list, join it
+                if isinstance(captured, list):
+                    content = '\n'.join(captured)
+                else:
+                    content = str(captured) if captured else "Empty pane"
+            except Exception:
+                content = "Error capturing pane"
+
+            window_dict2: dict[str, str | bool] = {
+                "window_name": window_name,
+                "window_index": window_index,
+                "content": content,
+                "is_active": is_active
+            }
+            windows_data.append(window_dict2)
+
+        return windows_data if windows_data else "No windows in session"
+
+    except Exception as e:
+        return f"Error capturing pane: {str(e)}"
+
 def create_worktree_with_branch(name: str, prefix: str) -> tuple[bool, str]:
     """Create a git worktree with the specified name and branch prefix.
 

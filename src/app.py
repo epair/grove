@@ -9,7 +9,7 @@ from textual.widgets import Footer, ListView, ListItem, Label
 from textual.reactive import reactive
 from textual.containers import Vertical
 
-from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, MetadataTopDisplay, MetadataBottomDisplay
+from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, MetadataTopDisplay, TmuxPanePreview
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -46,12 +46,13 @@ class GroveApp(App):
             with ScrollableContainer(id='metadata_top_container'):
                 yield MetadataTopDisplay("*Select a worktree to view metadata*", id="metadata_top")
             with ScrollableContainer(id='metadata_bottom_container'):
-                yield MetadataBottomDisplay("*Select a worktree to view metadata*", id="metadata_bottom")
+                yield TmuxPanePreview(id="tmux_preview")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one(Sidebar).border_title = "Worktrees"
         self.query_one("#git_status_container").border_title = "Git Status"
+        self.query_one("#metadata_bottom_container").border_title = "Tmux Pane Preview"
         self.theme = "tokyo-night"
         # Clean up orphaned worktrees on startup
         self.cleanup_orphaned_worktrees()
@@ -424,11 +425,11 @@ class GroveApp(App):
         """Update all displays when selected worktree changes."""
         git_status = self.query_one("#git_status", GitStatusDisplay)
         metadata_top = self.query_one("#metadata_top", MetadataTopDisplay)
-        metadata_bottom = self.query_one("#metadata_bottom", MetadataBottomDisplay)
+        tmux_preview = self.query_one("#tmux_preview", TmuxPanePreview)
 
         git_status.update_content(selected_worktree)
         metadata_top.update_content(selected_worktree)
-        metadata_bottom.update_content(selected_worktree)
+        tmux_preview.update_content(selected_worktree)
 
     def cleanup_orphaned_worktrees(self) -> None:
         """Clean up worktrees that have published PRs but no remote branch."""
