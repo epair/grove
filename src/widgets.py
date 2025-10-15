@@ -73,11 +73,6 @@ class GitStatusDisplay(Widget):
         # Build the output with Rich Text
         lines: list[Text] = []
 
-        # Title
-        title = Text("Git Status", style="bold")
-        lines.append(title)
-        lines.append(Text())  # Empty line
-
         # Check if working tree is clean
         if not status["staged"] and not status["unstaged"] and not status["untracked"]:
             lines.append(Text("Working tree clean", style="dim italic"))

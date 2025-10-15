@@ -51,6 +51,7 @@ class GroveApp(App):
 
     def on_mount(self) -> None:
         self.query_one(Sidebar).border_title = "Worktrees"
+        self.query_one("#git_status_container").border_title = "Git Status"
         self.theme = "tokyo-night"
         # Clean up orphaned worktrees on startup
         self.cleanup_orphaned_worktrees()
