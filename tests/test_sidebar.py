@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from textual.widgets import ListView, ListItem, Label
 
-from src import GroveApp, MetadataDisplay
+from src import GroveApp, MetadataTopDisplay
 
 
 class TestSidebar:
@@ -60,7 +60,7 @@ class TestSidebar:
 
         async with app.run_test() as pilot:
             sidebar = app.query_one("#sidebar", ListView)
-            metadata_display = app.query_one("#body", MetadataDisplay)
+            metadata_display = app.query_one("#metadata_top", MetadataTopDisplay)
 
             # Simulate highlighting the first item (bugfix-01)
             sidebar.index = 0
@@ -72,7 +72,7 @@ class TestSidebar:
             # Verify the metadata display shows bugfix-01 content
             # Get the markdown content that was set via update()
             content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
-            assert "# bugfix-01" in content
+            assert "## Description" in content
 
     @patch('src.utils.get_active_tmux_sessions')
     async def test_reactive_selected_worktree_updates_display(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
@@ -81,7 +81,7 @@ class TestSidebar:
         app = GroveApp()
 
         async with app.run_test() as pilot:
-            metadata_display = app.query_one("#body", MetadataDisplay)
+            metadata_display = app.query_one("#metadata_top", MetadataTopDisplay)
 
             # Change the reactive attribute directly
             app.selected_worktree = "feature-one"
@@ -90,7 +90,7 @@ class TestSidebar:
             # Verify the metadata display is updated
             # Get the markdown content that was set via update()
             content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
-            assert "# feature-one" in content
+            assert "## Description" in content
 
     @patch('src.utils.get_active_tmux_sessions')
     @patch('src.utils.get_worktree_pr_status')

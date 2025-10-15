@@ -1,7 +1,7 @@
 """Grove - Git Worktree and Tmux Session Manager."""
 
 from .app import GroveApp
-from .widgets import Sidebar, MetadataDisplay
+from .widgets import Sidebar, GitStatusDisplay, MetadataTopDisplay, MetadataBottomDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     is_bare_git_repository,
@@ -16,7 +16,9 @@ from .utils import (
 __all__ = [
     "GroveApp",
     "Sidebar",
-    "MetadataDisplay",
+    "GitStatusDisplay",
+    "MetadataTopDisplay",
+    "MetadataBottomDisplay",
     "WorktreeFormScreen",
     "ConfirmDeleteScreen",
     "PRFormScreen",

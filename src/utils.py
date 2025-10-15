@@ -281,6 +281,67 @@ def get_worktree_git_info(worktree_name: str) -> dict[str, str]:
 
     return {"commit_message": "N/A", "commit_date": "N/A", "committer": "N/A"}
 
+def get_worktree_git_status(worktree_name: str) -> dict[str, list[str]]:
+    """Get git status for a worktree (staged, unstaged, untracked files).
+
+    Returns:
+        Dict with keys 'staged', 'unstaged', 'untracked' containing lists of file paths
+    """
+    bare_parent = get_bare_parent()
+
+    if bare_parent is None:
+        return {"staged": [], "unstaged": [], "untracked": []}
+
+    worktree_path = bare_parent / worktree_name
+    if not worktree_path.exists():
+        return {"staged": [], "unstaged": [], "untracked": []}
+
+    try:
+        # Get status using GitPython
+        repo = Repo(str(worktree_path))
+        status_output = repo.git.status('--short')
+
+        staged = []
+        unstaged = []
+        untracked = []
+
+        if status_output:
+            # Don't strip the whole output - that removes leading spaces from first line!
+            for line in status_output.split('\n'):
+                # Strip only trailing whitespace from each line
+                line = line.rstrip()
+                if not line:
+                    continue
+
+                # Parse git status --short format
+                # Format is: XY filename
+                # X = staged status, Y = unstaged status
+                status_codes = line[:2]
+                filename = line[3:] if len(line) > 3 else ""  # Git status has space after XY codes
+
+                x_code = status_codes[0]
+                y_code = status_codes[1]
+
+                # Check if file is untracked
+                if x_code == '?' and y_code == '?':
+                    untracked.append(filename)
+                else:
+                    # Check staged changes (first character)
+                    if x_code != ' ' and x_code != '?':
+                        staged.append(filename)
+
+                    # Check unstaged changes (second character)
+                    if y_code != ' ' and y_code != '?':
+                        unstaged.append(filename)
+
+        return {
+            "staged": staged,
+            "unstaged": unstaged,
+            "untracked": untracked
+        }
+    except Exception:
+        return {"staged": [], "unstaged": [], "untracked": []}
+
 def create_worktree_with_branch(name: str, prefix: str) -> tuple[bool, str]:
     """Create a git worktree with the specified name and branch prefix.
 

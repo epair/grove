@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from src import GroveApp, MetadataDisplay, get_worktree_metadata
+from src import GroveApp, MetadataTopDisplay, get_worktree_metadata
 
 
 class TestMetadata:
@@ -42,11 +42,11 @@ class TestMetadata:
             os.chdir(original_cwd)
 
     async def test_metadata_display_widget_update(self, change_to_example_repo: Path) -> None:
-        """Test that MetadataDisplay widget updates content correctly."""
+        """Test that MetadataTopDisplay widget updates content correctly."""
         app = GroveApp()
 
         async with app.run_test() as pilot:
-            metadata_display = app.query_one("#body", MetadataDisplay)
+            metadata_display = app.query_one("#metadata_top", MetadataTopDisplay)
 
             # Test updating with a valid worktree
             metadata_display.update_content("feature-one")
@@ -55,12 +55,9 @@ class TestMetadata:
             # by looking for the expected text in its render output
             content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
 
-            # Verify the content contains expected sections
-            assert "# feature-one" in content
+            # Verify the content contains expected sections (description and PR info only)
             assert "## Description" in content
             assert "## Pull Request Info" in content
-            assert "## Notes" in content
-            assert "## Git Information" in content
 
             # Test updating with empty worktree name
             metadata_display.update_content("")
@@ -68,4 +65,4 @@ class TestMetadata:
             # Since Markdown doesn't expose the content directly, we check if the widget has been updated
             # by looking for the expected text in its render output
             content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
-            assert "Select a worktree to view its metadata." in content
+            assert "Select a worktree to view metadata" in content

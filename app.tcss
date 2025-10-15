@@ -6,10 +6,29 @@
 }
 
 #body {
-    padding: 1;
-    margin: 1;
-    border: solid $secondary;
+    margin: 1 0 1 1;
     height: 99%;
+}
+
+#git_status {
+    padding: 1 2;
+    margin: 0;
+    border: solid $secondary;
+    height: auto;
+}
+
+#metadata_top {
+    padding: 0;
+    margin: 0;
+    border: solid $secondary;
+    min-height: 12;
+}
+
+#metadata_bottom {
+    padding: 0;
+    margin: 0;
+    border: solid $secondary;
+    min-height: 12;
 }
 
 /* Modal form styling */

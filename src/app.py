@@ -7,8 +7,9 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, ListView, ListItem, Label
 from textual.reactive import reactive
+from textual.containers import VerticalScroll
 
-from .widgets import Sidebar, MetadataDisplay
+from .widgets import Sidebar, GitStatusDisplay, MetadataTopDisplay, MetadataBottomDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -39,7 +40,10 @@ class GroveApp(App):
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Sidebar(id='sidebar')
-        yield MetadataDisplay("Select a worktree to view its metadata.", id="body")
+        with VerticalScroll(id='body'):
+            yield GitStatusDisplay(id="git_status")
+            yield MetadataTopDisplay("*Select a worktree to view metadata*", id="metadata_top")
+            yield MetadataBottomDisplay("*Select a worktree to view metadata*", id="metadata_bottom")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -413,9 +417,14 @@ class GroveApp(App):
             self.notify(f"Failed to switch to tmux session: {error_msg}", severity="error")
 
     def watch_selected_worktree(self, selected_worktree: str) -> None:
-        """Update metadata display when selected worktree changes."""
-        metadata_display = self.query_one("#body", MetadataDisplay)
-        metadata_display.update_content(selected_worktree)
+        """Update all displays when selected worktree changes."""
+        git_status = self.query_one("#git_status", GitStatusDisplay)
+        metadata_top = self.query_one("#metadata_top", MetadataTopDisplay)
+        metadata_bottom = self.query_one("#metadata_bottom", MetadataBottomDisplay)
+
+        git_status.update_content(selected_worktree)
+        metadata_top.update_content(selected_worktree)
+        metadata_bottom.update_content(selected_worktree)
 
     def cleanup_orphaned_worktrees(self) -> None:
         """Clean up worktrees that have published PRs but no remote branch."""
