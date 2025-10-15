@@ -7,9 +7,9 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, ListView, ListItem, Label
 from textual.reactive import reactive
-from textual.containers import VerticalScroll
+from textual.containers import Vertical
 
-from .widgets import Sidebar, GitStatusDisplay, MetadataTopDisplay, MetadataBottomDisplay
+from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, MetadataTopDisplay, MetadataBottomDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -40,10 +40,13 @@ class GroveApp(App):
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Sidebar(id='sidebar')
-        with VerticalScroll(id='body'):
-            yield GitStatusDisplay(id="git_status")
-            yield MetadataTopDisplay("*Select a worktree to view metadata*", id="metadata_top")
-            yield MetadataBottomDisplay("*Select a worktree to view metadata*", id="metadata_bottom")
+        with Vertical(id='body'):
+            with ScrollableContainer(id='git_status_container'):
+                yield GitStatusDisplay(id="git_status")
+            with ScrollableContainer(id='metadata_top_container'):
+                yield MetadataTopDisplay("*Select a worktree to view metadata*", id="metadata_top")
+            with ScrollableContainer(id='metadata_bottom_container'):
+                yield MetadataBottomDisplay("*Select a worktree to view metadata*", id="metadata_bottom")
         yield Footer()
 
     def on_mount(self) -> None:

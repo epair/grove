@@ -5,6 +5,7 @@ from textual.widgets import ListView, ListItem, Label, Markdown
 from textual.widget import Widget
 from textual.binding import Binding
 from textual.reactive import reactive
+from textual.containers import VerticalScroll
 from rich.text import Text
 from rich.console import RenderableType
 
@@ -30,6 +31,25 @@ class Sidebar(ListView):
                 yield ListItem(Label(f"{icon}{pr_indicator} {directory}"))
         else:
             yield ListItem(Label("No directories found"))
+
+
+class ScrollableContainer(VerticalScroll):
+    """A focusable scrollable container with j/k navigation."""
+
+    BINDINGS = [
+        Binding("j", "scroll_down", "Scroll down", show=False),
+        Binding("k", "scroll_up", "Scroll up", show=False),
+    ]
+
+    can_focus = True
+
+    def action_scroll_down(self) -> None:
+        """Scroll down one line."""
+        self.scroll_down(animate=False)
+
+    def action_scroll_up(self) -> None:
+        """Scroll up one line."""
+        self.scroll_up(animate=False)
 
 
 class GitStatusDisplay(Widget):

@@ -7,28 +7,50 @@
 
 #body {
     margin: 1 0 1 1;
-    height: 99%;
+    height: 100%;
+    layout: vertical;
+}
+
+#git_status_container {
+    height: 1fr;
+    border: solid $secondary;
+}
+
+#git_status_container:focus {
+    border: solid $primary;
+}
+
+#metadata_top_container {
+    height: 1fr;
+    border: solid $secondary;
+}
+
+#metadata_top_container:focus {
+    border: solid $primary;
+}
+
+#metadata_bottom_container {
+    height: 1fr;
+    border: solid $secondary;
+}
+
+#metadata_bottom_container:focus {
+    border: solid $primary;
 }
 
 #git_status {
     padding: 1 2;
     margin: 0;
-    border: solid $secondary;
-    height: auto;
 }
 
 #metadata_top {
     padding: 0;
     margin: 0;
-    border: solid $secondary;
-    min-height: 12;
 }
 
 #metadata_bottom {
     padding: 0;
     margin: 0;
-    border: solid $secondary;
-    min-height: 12;
 }
 
 /* Modal form styling */
