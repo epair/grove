@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from src import GroveApp, MetadataTopDisplay, get_worktree_metadata
+from src import GroveApp, DescriptionDisplay, get_worktree_metadata
 
 
 class TestMetadata:
@@ -42,27 +42,24 @@ class TestMetadata:
             os.chdir(original_cwd)
 
     async def test_metadata_display_widget_update(self, change_to_example_repo: Path) -> None:
-        """Test that MetadataTopDisplay widget updates content correctly."""
+        """Test that DescriptionDisplay widget updates content correctly."""
         app = GroveApp()
 
         async with app.run_test() as pilot:
-            metadata_display = app.query_one("#metadata_top", MetadataTopDisplay)
+            metadata_display = app.query_one("#description", DescriptionDisplay)
 
             # Test updating with a valid worktree
             metadata_display.update_content("feature-one")
-            # Get the markdown content that was set via update()
-            # Since Markdown doesn't expose the content directly, we check if the widget has been updated
-            # by looking for the expected text in its render output
-            content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
+            # Get the inner markdown widget
+            from textual.widgets import Markdown
+            markdown = metadata_display.query_one("#description_markdown", Markdown)
+            content = str(markdown._markdown) if hasattr(markdown, '_markdown') else ""
 
-            # Verify the content contains expected sections (description and PR info only)
-            assert "## Description" in content
-            assert "## Pull Request Info" in content
+            # Verify the content contains expected description content
+            assert "user authentication" in content.lower()
 
             # Test updating with empty worktree name
             metadata_display.update_content("")
             # Get the markdown content that was set via update()
-            # Since Markdown doesn't expose the content directly, we check if the widget has been updated
-            # by looking for the expected text in its render output
-            content = str(metadata_display._markdown) if hasattr(metadata_display, '_markdown') else ""
-            assert "Select a worktree to view metadata" in content
+            content = str(markdown._markdown) if hasattr(markdown, '_markdown') else ""
+            assert "Select a worktree to view description" in content

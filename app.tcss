@@ -36,12 +36,46 @@
     border: solid $primary;
 }
 
-#metadata_top_container {
+#metadata_content_switcher_container {
     height: 1fr;
     border: solid $secondary;
 }
 
-#metadata_top_container:focus {
+#metadata_content_switcher {
+    width: 100%;
+    height: 100%;
+}
+
+#description {
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    border: solid transparent;
+}
+
+#description:focus {
+    border: solid $primary;
+}
+
+#pr {
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    border: solid transparent;
+}
+
+#pr:focus {
+    border: solid $primary;
+}
+
+#notes {
+    padding: 0;
+    margin: 0;
+    height: 100%;
+    border: solid transparent;
+}
+
+#notes:focus {
     border: solid $primary;
 }
 
@@ -61,11 +95,6 @@
 
 #git_log {
     padding: 1 2;
-    margin: 0;
-}
-
-#metadata_top {
-    padding: 0;
     margin: 0;
 }
 

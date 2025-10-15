@@ -5,11 +5,11 @@ import time
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, ListView, ListItem, Label
+from textual.widgets import Footer, ListView, ListItem, Label, ContentSwitcher
 from textual.reactive import reactive
 from textual.containers import Vertical, Horizontal
 
-from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, MetadataTopDisplay, TmuxPanePreview
+from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, MetadataTopDisplay, TmuxPanePreview, DescriptionDisplay, PRDisplay, NotesDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -32,28 +32,35 @@ class GroveApp(App):
         ("q", "quit", "Quit"),
         ("n", "new_worktree", "New worktree"),
         ("d", "delete_worktree", "Delete worktree"),
-        ("p", "create_pr", "Create PR")
+        ("p", "create_pr", "Create PR"),
+        ("[", "previous_metadata_page", "Previous page"),
+        ("]", "next_metadata_page", "Next page")
     ]
 
     selected_worktree = reactive("")
+    current_metadata_page = reactive(0)  # 0=description, 1=pr, 2=notes
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Sidebar(id='sidebar')
         with Vertical(id='body'):
+            with Vertical(id='metadata_content_switcher_container'):
+                with ContentSwitcher(id='metadata_content_switcher', initial='description'):
+                    yield DescriptionDisplay(id="description")
+                    yield PRDisplay(id="pr")
+                    yield NotesDisplay(id="notes")
             with Horizontal(id='git_status_row'):
                 with ScrollableContainer(id='git_status_container'):
                     yield GitStatusDisplay(id="git_status")
                 with ScrollableContainer(id='git_log_container'):
                     yield GitLogDisplay(id="git_log")
-            with ScrollableContainer(id='metadata_top_container'):
-                yield MetadataTopDisplay("*Select a worktree to view metadata*", id="metadata_top")
             with ScrollableContainer(id='metadata_bottom_container'):
                 yield TmuxPanePreview(id="tmux_preview")
         yield Footer()
 
     def on_mount(self) -> None:
         self.query_one(Sidebar).border_title = "Worktrees"
+        self.query_one("#metadata_content_switcher_container").border_title = "[bold]Description[/bold] - [dim]PR[/dim] - [dim]Notes[/dim]"
         self.query_one("#git_status_container").border_title = "Git Status"
         self.query_one("#git_log_container").border_title = "Git Log"
         self.query_one("#metadata_bottom_container").border_title = "Tmux Pane Preview"
@@ -80,6 +87,14 @@ class GroveApp(App):
             return
 
         self.push_screen(PRFormScreen(), self.handle_pr_submission)
+
+    def action_previous_metadata_page(self) -> None:
+        """Navigate to the previous metadata page."""
+        self.current_metadata_page = (self.current_metadata_page - 1) % 3
+
+    def action_next_metadata_page(self) -> None:
+        """Navigate to the next metadata page."""
+        self.current_metadata_page = (self.current_metadata_page + 1) % 3
 
     def handle_worktree_creation(self, form_data: dict[str, str] | None) -> None:
         """Handle the result from the worktree creation form."""
@@ -429,13 +444,43 @@ class GroveApp(App):
         """Update all displays when selected worktree changes."""
         git_status = self.query_one("#git_status", GitStatusDisplay)
         git_log = self.query_one("#git_log", GitLogDisplay)
-        metadata_top = self.query_one("#metadata_top", MetadataTopDisplay)
+        description_display = self.query_one("#description", DescriptionDisplay)
+        pr_display = self.query_one("#pr", PRDisplay)
+        notes_display = self.query_one("#notes", NotesDisplay)
         tmux_preview = self.query_one("#tmux_preview", TmuxPanePreview)
 
         git_status.update_content(selected_worktree)
         git_log.update_content(selected_worktree)
-        metadata_top.update_content(selected_worktree)
+        description_display.update_content(selected_worktree)
+        pr_display.update_content(selected_worktree)
+        notes_display.update_content(selected_worktree)
         tmux_preview.update_content(selected_worktree)
+
+    def watch_current_metadata_page(self, page: int) -> None:
+        """Update content switcher and border title when page changes."""
+        # Map page number to widget ID
+        page_map = {
+            0: "description",
+            1: "pr",
+            2: "notes"
+        }
+
+        widget_id = page_map.get(page, "description")
+
+        # Switch content
+        content_switcher = self.query_one("#metadata_content_switcher", ContentSwitcher)
+        content_switcher.current = widget_id
+
+        # Build border title with current page bold, others dimmed
+        description_text = "[bold]Description[/bold]" if page == 0 else "[dim]Description[/dim]"
+        pr_text = "[bold]PR[/bold]" if page == 1 else "[dim]PR[/dim]"
+        notes_text = "[bold]Notes[/bold]" if page == 2 else "[dim]Notes[/dim]"
+
+        border_title = f"{description_text} - {pr_text} - {notes_text}"
+
+        # Update border title
+        container = self.query_one("#metadata_content_switcher_container")
+        container.border_title = border_title
 
     def cleanup_orphaned_worktrees(self) -> None:
         """Clean up worktrees that have published PRs but no remote branch."""
