@@ -2,11 +2,17 @@
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 from git import Repo
 from git.exc import GitCommandError
 import libtmux
+
+# Cache for tmux pane preview data to improve performance
+# Structure: {worktree_name: (timestamp, pane_data)}
+_tmux_pane_cache: dict[str, tuple[float, list[dict[str, str | bool]] | str]] = {}
+TMUX_PANE_CACHE_TTL = 30.0  # seconds
 
 
 def is_bare_git_repository() -> bool:
@@ -513,29 +519,44 @@ def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | s
     if not worktree_name:
         return ""
 
+    # Check cache first
+    current_time = time.time()
+    if worktree_name in _tmux_pane_cache:
+        cached_timestamp, cached_data = _tmux_pane_cache[worktree_name]
+        if current_time - cached_timestamp < TMUX_PANE_CACHE_TTL:
+            return cached_data
+
     try:
         # Get tmux server
         server = get_tmux_server()
         if server is None:
-            return "Tmux not available"
+            result: list[dict[str, str | bool]] | str = "Tmux not available"
+            _tmux_pane_cache[worktree_name] = (time.time(), result)
+            return result
 
         # Create session name from worktree name (replace dots with dashes)
         session_name = worktree_name.replace('.', '-')
 
         # Check if session exists
         if not session_exists(server, session_name):
-            return "No active tmux session"
+            result = "No active tmux session"
+            _tmux_pane_cache[worktree_name] = (time.time(), result)
+            return result
 
         # Get the session
         sessions = server.sessions.filter(session_name=session_name)
         if not sessions:
-            return "No active tmux session"
+            result = "No active tmux session"
+            _tmux_pane_cache[worktree_name] = (time.time(), result)
+            return result
 
         session = sessions[0]
 
         # Get all windows in the session
         if not session.windows:
-            return "No windows in session"
+            result = "No windows in session"
+            _tmux_pane_cache[worktree_name] = (time.time(), result)
+            return result
 
         windows_data = []
 
@@ -567,10 +588,9 @@ def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | s
             if active_pane is None:
                 active_pane = window.panes[0]
 
-            # Capture the pane content (visible portion)
-            # Use start='-' and end='-' to capture entire scrollback
+            # Capture the pane content (visible portion only for performance)
             try:
-                captured = active_pane.capture_pane(start='-', end='-')
+                captured = active_pane.capture_pane()
 
                 # If captured is a list, join it
                 if isinstance(captured, list):
@@ -588,10 +608,18 @@ def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | s
             }
             windows_data.append(window_dict2)
 
-        return windows_data if windows_data else "No windows in session"
+        result = windows_data if windows_data else "No windows in session"
+
+        # Cache the result
+        _tmux_pane_cache[worktree_name] = (time.time(), result)
+
+        return result
 
     except Exception as e:
-        return f"Error capturing pane: {str(e)}"
+        error_msg = f"Error capturing pane: {str(e)}"
+        # Cache error messages too (to avoid repeated failures)
+        _tmux_pane_cache[worktree_name] = (time.time(), error_msg)
+        return error_msg
 
 def create_worktree_with_branch(name: str, prefix: str) -> tuple[bool, str]:
     """Create a git worktree with the specified name and branch prefix.
