@@ -3,6 +3,7 @@
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 from git import Repo
 from git.exc import GitCommandError
 import libtmux
@@ -341,6 +342,173 @@ def get_worktree_git_status(worktree_name: str) -> dict[str, list[str]]:
         }
     except Exception:
         return {"staged": [], "unstaged": [], "untracked": []}
+
+def get_worktree_git_log(worktree_name: str) -> dict[str, Any]:
+    """Get git log information for a worktree with push/unpush status.
+
+    Returns:
+        Dict with:
+        - 'sync_status': str - 'up-to-date', 'ahead', 'behind', 'diverged', 'no-upstream'
+        - 'ahead_count': int - number of commits ahead of remote
+        - 'behind_count': int - number of commits behind remote
+        - 'comparison_branch': str - name of branch being compared against
+        - 'commits': list of dicts with 'hash', 'message', 'author', 'date', 'is_pushed'
+    """
+    bare_parent = get_bare_parent()
+
+    if bare_parent is None:
+        return {
+            "sync_status": "no-upstream",
+            "ahead_count": 0,
+            "behind_count": 0,
+            "comparison_branch": "",
+            "commits": []
+        }
+
+    worktree_path = bare_parent / worktree_name
+    if not worktree_path.exists():
+        return {
+            "sync_status": "no-upstream",
+            "ahead_count": 0,
+            "behind_count": 0,
+            "comparison_branch": "",
+            "commits": []
+        }
+
+    try:
+        repo = Repo(str(worktree_path))
+
+        # Get current branch
+        if repo.head.is_detached:
+            return {
+                "sync_status": "no-upstream",
+                "ahead_count": 0,
+                "behind_count": 0,
+                "comparison_branch": "",
+                "commits": []
+            }
+
+        current_branch = repo.active_branch
+
+        # Get upstream branch
+        try:
+            upstream = current_branch.tracking_branch()
+        except Exception:
+            upstream = None
+
+        # If no upstream, try to use origin/main as comparison
+        # comparison_branch can be a RemoteReference or a string
+        comparison_branch: Any = upstream
+        comparison_branch_name = ""
+
+        if not upstream:
+            try:
+                # Check if origin/main exists
+                repo.commit('origin/main')
+                comparison_branch = 'origin/main'
+            except Exception:
+                comparison_branch = None
+
+        sync_status = "no-upstream"
+        ahead_count = 0
+        behind_count = 0
+
+        if comparison_branch:
+            # Get ahead/behind counts
+            try:
+                # Get the branch name string
+                branch_name = comparison_branch.name if hasattr(comparison_branch, 'name') else comparison_branch
+
+                # Strip "origin/" prefix for display purposes
+                display_name = branch_name
+                if display_name.startswith('origin/'):
+                    display_name = display_name[7:]  # Remove "origin/" (7 characters)
+                comparison_branch_name = display_name
+
+                # Count commits ahead and behind
+                ahead_commits = list(repo.iter_commits(f'{branch_name}..{current_branch.name}'))
+                behind_commits = list(repo.iter_commits(f'{current_branch.name}..{branch_name}'))
+
+                ahead_count = len(ahead_commits)
+                behind_count = len(behind_commits)
+
+                if ahead_count == 0 and behind_count == 0:
+                    sync_status = "up-to-date"
+                elif ahead_count > 0 and behind_count == 0:
+                    sync_status = "ahead"
+                elif ahead_count == 0 and behind_count > 0:
+                    sync_status = "behind"
+                else:
+                    sync_status = "diverged"
+            except Exception:
+                pass
+
+        # Get commit log (last 20 commits)
+        commits = []
+        try:
+            commit_list = list(repo.iter_commits(current_branch.name, max_count=20))
+
+            # Get the set of pushed/existing commit hashes
+            # Compare against the same branch we used for sync status (upstream or origin/main)
+            pushed_commits = set()
+            if comparison_branch:
+                try:
+                    branch_name = comparison_branch.name if hasattr(comparison_branch, 'name') else comparison_branch
+                    pushed_commit_list = list(repo.iter_commits(branch_name))
+                    pushed_commits = {commit.hexsha for commit in pushed_commit_list}
+                except Exception:
+                    pass
+
+            for commit in commit_list:
+                # Format relative date
+                import datetime
+                commit_date = datetime.datetime.fromtimestamp(commit.committed_date)
+                now = datetime.datetime.now()
+                delta = now - commit_date
+
+                if delta.days > 365:
+                    relative_date = f"{delta.days // 365} year{'s' if delta.days // 365 > 1 else ''} ago"
+                elif delta.days > 30:
+                    relative_date = f"{delta.days // 30} month{'s' if delta.days // 30 > 1 else ''} ago"
+                elif delta.days > 0:
+                    relative_date = f"{delta.days} day{'s' if delta.days > 1 else ''} ago"
+                elif delta.seconds > 3600:
+                    relative_date = f"{delta.seconds // 3600} hour{'s' if delta.seconds // 3600 > 1 else ''} ago"
+                elif delta.seconds > 60:
+                    relative_date = f"{delta.seconds // 60} minute{'s' if delta.seconds // 60 > 1 else ''} ago"
+                else:
+                    relative_date = "just now"
+
+                # Get commit message - ensure it's a string
+                message_str = str(commit.message).strip()
+                first_line = message_str.split('\n')[0] if '\n' in message_str else message_str
+
+                commits.append({
+                    "hash": commit.hexsha[:7],
+                    "message": first_line,
+                    "author": commit.author.name,
+                    "date": relative_date,
+                    "is_pushed": commit.hexsha in pushed_commits
+                })
+        except Exception:
+            pass
+
+        return {
+            "sync_status": sync_status,
+            "ahead_count": ahead_count,
+            "behind_count": behind_count,
+            "comparison_branch": comparison_branch_name,
+            "commits": commits
+        }
+
+    except Exception:
+        return {
+            "sync_status": "no-upstream",
+            "ahead_count": 0,
+            "behind_count": 0,
+            "comparison_branch": "",
+            "commits": []
+        }
 
 def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | str:
     """Get tmux pane preview content for all windows in a worktree's active session.

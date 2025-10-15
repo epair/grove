@@ -11,12 +11,28 @@
     layout: vertical;
 }
 
-#git_status_container {
+#git_status_row {
     height: 1fr;
+    layout: horizontal;
+}
+
+#git_status_container {
+    width: 1fr;
+    height: 100%;
     border: solid $secondary;
 }
 
 #git_status_container:focus {
+    border: solid $primary;
+}
+
+#git_log_container {
+    width: 1fr;
+    height: 100%;
+    border: solid $secondary;
+}
+
+#git_log_container:focus {
     border: solid $primary;
 }
 
@@ -39,6 +55,11 @@
 }
 
 #git_status {
+    padding: 1 2;
+    margin: 0;
+}
+
+#git_log {
     padding: 1 2;
     margin: 0;
 }

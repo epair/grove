@@ -7,9 +7,9 @@ from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, ListView, ListItem, Label
 from textual.reactive import reactive
-from textual.containers import Vertical
+from textual.containers import Vertical, Horizontal
 
-from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, MetadataTopDisplay, TmuxPanePreview
+from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, MetadataTopDisplay, TmuxPanePreview
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -41,8 +41,11 @@ class GroveApp(App):
         """Create child widgets for the app."""
         yield Sidebar(id='sidebar')
         with Vertical(id='body'):
-            with ScrollableContainer(id='git_status_container'):
-                yield GitStatusDisplay(id="git_status")
+            with Horizontal(id='git_status_row'):
+                with ScrollableContainer(id='git_status_container'):
+                    yield GitStatusDisplay(id="git_status")
+                with ScrollableContainer(id='git_log_container'):
+                    yield GitLogDisplay(id="git_log")
             with ScrollableContainer(id='metadata_top_container'):
                 yield MetadataTopDisplay("*Select a worktree to view metadata*", id="metadata_top")
             with ScrollableContainer(id='metadata_bottom_container'):
@@ -52,6 +55,7 @@ class GroveApp(App):
     def on_mount(self) -> None:
         self.query_one(Sidebar).border_title = "Worktrees"
         self.query_one("#git_status_container").border_title = "Git Status"
+        self.query_one("#git_log_container").border_title = "Git Log"
         self.query_one("#metadata_bottom_container").border_title = "Tmux Pane Preview"
         self.theme = "tokyo-night"
         # Clean up orphaned worktrees on startup
@@ -424,10 +428,12 @@ class GroveApp(App):
     def watch_selected_worktree(self, selected_worktree: str) -> None:
         """Update all displays when selected worktree changes."""
         git_status = self.query_one("#git_status", GitStatusDisplay)
+        git_log = self.query_one("#git_log", GitLogDisplay)
         metadata_top = self.query_one("#metadata_top", MetadataTopDisplay)
         tmux_preview = self.query_one("#tmux_preview", TmuxPanePreview)
 
         git_status.update_content(selected_worktree)
+        git_log.update_content(selected_worktree)
         metadata_top.update_content(selected_worktree)
         tmux_preview.update_content(selected_worktree)
 

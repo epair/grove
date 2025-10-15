@@ -12,7 +12,7 @@ from rich.console import RenderableType
 
 from .utils import get_worktree_directories, get_active_tmux_sessions, get_worktree_pr_status
 from .utils import get_worktree_metadata, get_worktree_git_info, get_worktree_git_status
-from .utils import get_tmux_pane_preview
+from .utils import get_tmux_pane_preview, get_worktree_git_log
 
 
 class Sidebar(ListView):
@@ -111,6 +111,108 @@ class GitStatusDisplay(Widget):
                 file_line.append("? ", style="bold yellow")
                 file_line.append(file, style="yellow")
                 lines.append(file_line)
+
+        return Text("\n").join(lines)
+
+
+class GitLogDisplay(Widget):
+    """Widget to display git log with lazygit-style formatting (pushed vs unpushed commits)."""
+
+    worktree_name: reactive[str] = reactive("")
+
+    def update_content(self, worktree_name: str) -> None:
+        """Update the display with git log for the given worktree."""
+        self.worktree_name = worktree_name
+        self.refresh(layout=True)  # Force layout recalculation for proper height adjustment
+
+    def render(self) -> RenderableType:
+        """Render git log with Rich Text styling."""
+        if not self.worktree_name:
+            return Text("Select a worktree to view git log", style="dim italic")
+
+        # Get git log data
+        log_data = get_worktree_git_log(self.worktree_name)
+
+        # Build the output with Rich Text
+        lines: list[Text] = []
+
+        # Show sync status at the top
+        sync_status = log_data["sync_status"]
+        ahead_count = log_data["ahead_count"]
+        behind_count = log_data["behind_count"]
+        comparison_branch = log_data.get("comparison_branch", "")
+
+        if sync_status == "up-to-date":
+            status_line = Text()
+            status_line.append("✓ ", style="bold green")
+            status_line.append("Up to date", style="green")
+            if comparison_branch:
+                status_line.append(f" ({comparison_branch})", style="dim green")
+            lines.append(status_line)
+        elif sync_status == "ahead":
+            status_line = Text()
+            status_line.append("↑ ", style="bold yellow")
+            status_line.append(f"Ahead {ahead_count} commit{'s' if ahead_count > 1 else ''}", style="yellow")
+            if comparison_branch:
+                status_line.append(f" ({comparison_branch})", style="dim yellow")
+            lines.append(status_line)
+        elif sync_status == "behind":
+            status_line = Text()
+            status_line.append("↓ ", style="bold red")
+            status_line.append(f"Behind {behind_count} commit{'s' if behind_count > 1 else ''}", style="red")
+            if comparison_branch:
+                status_line.append(f" ({comparison_branch})", style="dim red")
+            lines.append(status_line)
+        elif sync_status == "diverged":
+            status_line = Text()
+            status_line.append("⚠ ", style="bold magenta")
+            status_line.append(f"Diverged (↑{ahead_count} ↓{behind_count})", style="magenta")
+            if comparison_branch:
+                status_line.append(f" ({comparison_branch})", style="dim magenta")
+            lines.append(status_line)
+        elif sync_status == "no-upstream":
+            status_line = Text()
+            status_line.append("• ", style="dim")
+            status_line.append("No comparison branch available", style="dim italic")
+            lines.append(status_line)
+
+        lines.append(Text())  # Empty line
+
+        # Show commits
+        commits = log_data["commits"]
+
+        if not commits:
+            lines.append(Text("No commits", style="dim italic"))
+        else:
+            for commit in commits:
+                # Determine style based on whether commit is already in upstream/main
+                # is_pushed means: already in upstream branch OR already in main branch
+                if not commit["is_pushed"]:
+                    # New commits (not in upstream or main) - bright/yellow style
+                    hash_style = "bold yellow"
+                    message_style = "bold white"
+                    author_style = "cyan"
+                    date_style = "green"
+                else:
+                    # Existing commits (in upstream or main) - dim/gray style like in lazygit
+                    hash_style = "dim cyan"
+                    message_style = "dim white"
+                    author_style = "dim"
+                    date_style = "dim"
+
+                # Build commit line: hash message (author, date)
+                commit_line = Text()
+                commit_line.append(f"{commit['hash']} ", style=hash_style)
+                commit_line.append(f"{commit['message']}", style=message_style)
+                lines.append(commit_line)
+
+                # Add author and date on next line with indent
+                info_line = Text()
+                info_line.append("  ", style="")
+                info_line.append(f"{commit['author']}", style=author_style)
+                info_line.append(" • ", style="dim")
+                info_line.append(f"{commit['date']}", style=date_style)
+                lines.append(info_line)
 
         return Text("\n").join(lines)
 
