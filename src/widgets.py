@@ -40,6 +40,7 @@ class GitStatusDisplay(Widget):
     def update_content(self, worktree_name: str) -> None:
         """Update the display with git status for the given worktree."""
         self.worktree_name = worktree_name
+        self.refresh(layout=True)  # Force layout recalculation for proper height adjustment
 
     def render(self) -> RenderableType:
         """Render git status with Rich Text styling."""
