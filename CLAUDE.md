@@ -11,7 +11,7 @@ Grove is a Git Worktree and Tmux Session Manager - a modern terminal interface f
 **Visual worktree browser:** Displays all Git worktrees in a repository with a split-screen layout (1/3 list view, 2/3 details view) ✅
 **Tmux integration:** Shows active tmux session indicators (● for active, ○ for inactive) in the sidebar ✅
 **Worktree management:** Create new worktrees from modal form, delete worktrees with confirmation dialog ✅
-**Metadata system:** Maintains and displays worktree-specific documentation (descriptions, PR info, notes) in a .grove/metadata/ directory structure as formatted markdown ✅
+**Metadata system:** Maintains and displays worktree-specific PR information in a .grove/metadata/ directory structure as formatted markdown ✅
 **Interactive navigation:** Keyboard-driven interface similar to lazygit/htop for efficient workflow management
 
 The tool essentially bridges the gap between Git worktree management and tmux session organization, making it easier to switch between different branches/features while maintaining separate development environments. It pulls all data dynamically from Git and tmux CLI commands rather than using a database, keeping the system lightweight and in sync with the actual state of your repositories and sessions.
@@ -94,7 +94,7 @@ mypy src/
 - Application exits with error if not run from a bare git repository
 - Discovers and lists directories at the same level as `.bare` directory with tmux session indicators
 - Excludes hidden directories (starting with `.`) from the sidebar
-- Displays worktree metadata (description, PR info, notes) as formatted markdown in the main body
+- Displays worktree PR information as formatted markdown in a single view
 - Creates new worktrees via modal form (Ctrl+N)
 - Deletes selected worktree with confirmation (Ctrl+D)
 - Supports repositories with the following directory structure:
@@ -106,13 +106,9 @@ repository/
 │   ├── .setup
 │   └── metadata/
 │       ├── feature-one/
-│       │   ├── description.md
-│       │   ├── pr.md
-│       │   └── notes.md
+│       │   └── pr.md
 │       └── bugfix-01/
-│           ├── description.md
-│           ├── pr.md
-│           └── notes.md
+│           └── pr.md
 ├── feature-one/
 └── bugfix-01/
 

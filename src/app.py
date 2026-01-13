@@ -5,11 +5,11 @@ import time
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, ListView, ListItem, Label, ContentSwitcher
+from textual.widgets import Footer, ListView, ListItem, Label
 from textual.reactive import reactive
 from textual.containers import Vertical, Horizontal
 
-from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, TmuxPanePreview, DescriptionDisplay, PRDisplay, NotesDisplay
+from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, TmuxPanePreview, MetadataDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -21,7 +21,8 @@ from .utils import (
     create_or_switch_to_session,
     get_tmux_server,
     session_exists,
-    is_inside_tmux
+    is_inside_tmux,
+    get_bare_parent
 )
 
 
@@ -35,22 +36,16 @@ class GroveApp(App):
         ("d", "delete_worktree", "Delete worktree"),
         ("p", "create_pr", "Create PR"),
         ("e", "edit_metadata", "Edit metadata"),
-        ("[", "previous_metadata_page", "Previous page"),
-        ("]", "next_metadata_page", "Next page")
     ]
 
     selected_worktree = reactive("")
-    current_metadata_page = reactive(0)  # 0=description, 1=pr, 2=notes
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         yield Sidebar(id='sidebar')
         with Vertical(id='body'):
-            with Vertical(id='metadata_content_switcher_container'):
-                with ContentSwitcher(id='metadata_content_switcher', initial='description'):
-                    yield DescriptionDisplay(id="description")
-                    yield PRDisplay(id="pr")
-                    yield NotesDisplay(id="notes")
+            with ScrollableContainer(id='metadata_container'):
+                yield MetadataDisplay(id="metadata")
             with Horizontal(id='git_status_row'):
                 with ScrollableContainer(id='git_status_container'):
                     yield GitStatusDisplay(id="git_status")
@@ -62,13 +57,77 @@ class GroveApp(App):
 
     def on_mount(self) -> None:
         self.query_one(Sidebar).border_title = "Worktrees"
-        self.query_one("#metadata_content_switcher_container").border_title = "[bold]Description[/bold] - [dim]PR[/dim] - [dim]Notes[/dim]"
+        self.query_one("#metadata_container").border_title = "PR Description"
         self.query_one("#git_status_container").border_title = "Git Status"
         self.query_one("#git_log_container").border_title = "Git Log"
         self.query_one("#metadata_bottom_container").border_title = "Tmux Pane Preview"
         self.theme = "tokyo-night"
         # Clean up orphaned worktrees on startup
         self.cleanup_orphaned_worktrees()
+        # Auto-select the current worktree
+        self.auto_select_current_worktree()
+
+    def detect_current_worktree(self) -> str | None:
+        """Detect which worktree the user was in when launching Grove.
+
+        Returns:
+            The worktree name if detected, None otherwise.
+        """
+        current_path = Path.cwd()
+        bare_parent = get_bare_parent()
+
+        if bare_parent is None:
+            return None
+
+        # Get list of valid worktrees
+        worktrees = get_worktree_directories()
+        if not worktrees:
+            return None
+
+        # Check if current path is within bare_parent
+        try:
+            relative_path = current_path.relative_to(bare_parent)
+        except ValueError:
+            # current_path is not under bare_parent
+            return None
+
+        # Get the first component of the relative path
+        parts = relative_path.parts
+        if not parts:
+            # We're exactly at bare_parent - default to first worktree
+            return worktrees[0]
+
+        first_dir = parts[0]
+
+        # Check if this directory is a valid worktree
+        if first_dir in worktrees:
+            return first_dir
+
+        # Not in a worktree (e.g., in .grove, .bare, or other hidden dir)
+        # Default to first worktree
+        return worktrees[0]
+
+    def auto_select_current_worktree(self) -> None:
+        """Auto-select and highlight the worktree the user was in when launching."""
+        detected_worktree = self.detect_current_worktree()
+
+        if detected_worktree is None:
+            return
+
+        # Get the sidebar and list of worktrees
+        sidebar = self.query_one("#sidebar", Sidebar)
+        worktrees = get_worktree_directories()
+
+        # Find the index of the detected worktree
+        try:
+            index = worktrees.index(detected_worktree)
+        except ValueError:
+            # Worktree not in list (shouldn't happen, but defensive)
+            return
+
+        # Set the sidebar index to select the worktree
+        # This will trigger on_list_view_highlighted which updates selected_worktree
+        sidebar.index = index
 
     def action_new_worktree(self) -> None:
         """An action to create a new worktree."""
@@ -91,7 +150,7 @@ class GroveApp(App):
         self.push_screen(PRFormScreen(), self.handle_pr_submission)
 
     def action_edit_metadata(self) -> None:
-        """An action to edit the currently visible metadata file in neovim."""
+        """An action to edit pr.md metadata file in neovim."""
         if not self.selected_worktree:
             self.notify("No worktree selected", severity="warning")
             return
@@ -109,29 +168,16 @@ class GroveApp(App):
             self.notify("Could not find worktree root directory", severity="error")
             return
 
-        # Map current page to filename
-        page_to_file = {
-            0: "description.md",
-            1: "pr.md",
-            2: "notes.md"
-        }
-        filename = page_to_file.get(self.current_metadata_page, "description.md")
-
         # Construct metadata file path
         metadata_dir = worktree_root / ".grove" / "metadata" / self.selected_worktree
-        metadata_file = metadata_dir / filename
+        metadata_file = metadata_dir / "pr.md"
 
         # Ensure metadata directory exists
         metadata_dir.mkdir(parents=True, exist_ok=True)
 
         # Ensure metadata file exists (create with template if needed)
         if not metadata_file.exists():
-            if filename == "description.md":
-                metadata_file.write_text("What are you building?")
-            elif filename == "pr.md":
-                metadata_file.write_text("# Pull Request\n\n")
-            elif filename == "notes.md":
-                metadata_file.write_text("# Notes\n\n")
+            metadata_file.write_text("# Pull Request\n\nWhat are you building?\n\n")
 
         # Get tmux server
         server = get_tmux_server()
@@ -164,9 +210,8 @@ class GroveApp(App):
 
         # Create new window in session
         try:
-            window_name = f"edit-{filename.replace('.md', '')}"
             new_window = session.new_window(
-                window_name=window_name,
+                window_name="edit-pr",
                 start_directory=str(worktree_path),
                 attach=False
             )
@@ -188,14 +233,6 @@ class GroveApp(App):
 
         except Exception as e:
             self.notify(f"Failed to open file in tmux: {str(e)}", severity="error")
-
-    def action_previous_metadata_page(self) -> None:
-        """Navigate to the previous metadata page."""
-        self.current_metadata_page = (self.current_metadata_page - 1) % 3
-
-    def action_next_metadata_page(self) -> None:
-        """Navigate to the next metadata page."""
-        self.current_metadata_page = (self.current_metadata_page + 1) % 3
 
     def handle_worktree_creation(self, form_data: dict[str, str] | None) -> None:
         """Handle the result from the worktree creation form."""
@@ -545,43 +582,13 @@ class GroveApp(App):
         """Update all displays when selected worktree changes."""
         git_status = self.query_one("#git_status", GitStatusDisplay)
         git_log = self.query_one("#git_log", GitLogDisplay)
-        description_display = self.query_one("#description", DescriptionDisplay)
-        pr_display = self.query_one("#pr", PRDisplay)
-        notes_display = self.query_one("#notes", NotesDisplay)
+        metadata_display = self.query_one("#metadata", MetadataDisplay)
         tmux_preview = self.query_one("#tmux_preview", TmuxPanePreview)
 
         git_status.update_content(selected_worktree)
         git_log.update_content(selected_worktree)
-        description_display.update_content(selected_worktree)
-        pr_display.update_content(selected_worktree)
-        notes_display.update_content(selected_worktree)
+        metadata_display.update_content(selected_worktree)
         tmux_preview.update_content(selected_worktree)
-
-    def watch_current_metadata_page(self, page: int) -> None:
-        """Update content switcher and border title when page changes."""
-        # Map page number to widget ID
-        page_map = {
-            0: "description",
-            1: "pr",
-            2: "notes"
-        }
-
-        widget_id = page_map.get(page, "description")
-
-        # Switch content
-        content_switcher = self.query_one("#metadata_content_switcher", ContentSwitcher)
-        content_switcher.current = widget_id
-
-        # Build border title with current page bold, others dimmed
-        description_text = "[bold]Description[/bold]" if page == 0 else "[dim]Description[/dim]"
-        pr_text = "[bold]PR[/bold]" if page == 1 else "[dim]PR[/dim]"
-        notes_text = "[bold]Notes[/bold]" if page == 2 else "[dim]Notes[/dim]"
-
-        border_title = f"{description_text} - {pr_text} - {notes_text}"
-
-        # Update border title
-        container = self.query_one("#metadata_content_switcher_container")
-        container.border_title = border_title
 
     def cleanup_orphaned_worktrees(self) -> None:
         """Clean up worktrees that have published PRs but no remote branch."""

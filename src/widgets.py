@@ -395,39 +395,7 @@ class TmuxPanePreview(Widget):
                 container.mount(window_preview)
 
 
-class DescriptionDisplay(VerticalScroll):
-    """Widget to display description.md metadata file."""
-
-    can_focus = True
-
-    BINDINGS = [
-        Binding("j", "scroll_down", "Scroll down", show=False),
-        Binding("k", "scroll_up", "Scroll up", show=False),
-    ]
-
-    def compose(self) -> ComposeResult:
-        """Compose the markdown display."""
-        yield Markdown("*Select a worktree to view description*", id="description_markdown")
-
-    def update_content(self, worktree_name: str) -> None:
-        """Update the display with description metadata for the given worktree."""
-        markdown = self.query_one("#description_markdown", Markdown)
-
-        if not worktree_name:
-            markdown.update("*Select a worktree to view description*")
-            return
-
-        # Get metadata
-        metadata = get_worktree_metadata(worktree_name)
-
-        # Format the content
-        if metadata.get("description"):
-            markdown.update(metadata["description"])
-        else:
-            markdown.update("*No description available*")
-
-
-class PRDisplay(VerticalScroll):
+class MetadataDisplay(VerticalScroll):
     """Widget to display pr.md metadata file."""
 
     can_focus = True
@@ -439,53 +407,20 @@ class PRDisplay(VerticalScroll):
 
     def compose(self) -> ComposeResult:
         """Compose the markdown display."""
-        yield Markdown("*Select a worktree to view PR info*", id="pr_markdown")
+        yield Markdown("*Select a worktree to view PR description*", id="metadata_markdown")
 
     def update_content(self, worktree_name: str) -> None:
-        """Update the display with PR metadata for the given worktree."""
-        markdown = self.query_one("#pr_markdown", Markdown)
+        """Update the display with metadata for the given worktree."""
+        markdown = self.query_one("#metadata_markdown", Markdown)
 
         if not worktree_name:
-            markdown.update("*Select a worktree to view PR info*")
+            markdown.update("*Select a worktree to view PR description*")
             return
 
-        # Get metadata
+        # Get metadata (now returns string directly)
         metadata = get_worktree_metadata(worktree_name)
 
-        # Format the content
-        if metadata.get("pr"):
-            markdown.update(metadata["pr"])
+        if metadata:
+            markdown.update(metadata)
         else:
-            markdown.update("*No PR information available*")
-
-
-class NotesDisplay(VerticalScroll):
-    """Widget to display notes.md metadata file."""
-
-    can_focus = True
-
-    BINDINGS = [
-        Binding("j", "scroll_down", "Scroll down", show=False),
-        Binding("k", "scroll_up", "Scroll up", show=False),
-    ]
-
-    def compose(self) -> ComposeResult:
-        """Compose the markdown display."""
-        yield Markdown("*Select a worktree to view notes*", id="notes_markdown")
-
-    def update_content(self, worktree_name: str) -> None:
-        """Update the display with notes metadata for the given worktree."""
-        markdown = self.query_one("#notes_markdown", Markdown)
-
-        if not worktree_name:
-            markdown.update("*Select a worktree to view notes*")
-            return
-
-        # Get metadata
-        metadata = get_worktree_metadata(worktree_name)
-
-        # Format the content
-        if metadata.get("notes"):
-            markdown.update(metadata["notes"])
-        else:
-            markdown.update("*No notes available*")
+            markdown.update("*No PR description available*")

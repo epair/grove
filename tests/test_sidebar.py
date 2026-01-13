@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from textual.widgets import ListView, ListItem, Label
 
-from src import GroveApp, DescriptionDisplay
+from src import GroveApp, MetadataDisplay
 
 
 class TestSidebar:
@@ -60,7 +60,7 @@ class TestSidebar:
 
         async with app.run_test() as pilot:
             sidebar = app.query_one("#sidebar", ListView)
-            metadata_display = app.query_one("#description", DescriptionDisplay)
+            metadata_display = app.query_one("#metadata", MetadataDisplay)
 
             # Simulate highlighting the first item (bugfix-01)
             sidebar.index = 0
@@ -69,13 +69,6 @@ class TestSidebar:
             # Verify the selected worktree is updated
             assert app.selected_worktree == "bugfix-01"
 
-            # Verify the metadata display shows bugfix-01 content
-            # Get the inner markdown widget
-            from textual.widgets import Markdown
-            markdown = metadata_display.query_one("#description_markdown", Markdown)
-            content = str(markdown._markdown) if hasattr(markdown, '_markdown') else ""
-            assert "bugfix" in content.lower() or "bug" in content.lower()
-
     @patch('src.utils.get_active_tmux_sessions')
     async def test_reactive_selected_worktree_updates_display(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that changing selected_worktree reactive attribute updates the display."""
@@ -83,7 +76,7 @@ class TestSidebar:
         app = GroveApp()
 
         async with app.run_test() as pilot:
-            metadata_display = app.query_one("#description", DescriptionDisplay)
+            metadata_display = app.query_one("#metadata", MetadataDisplay)
 
             # Change the reactive attribute directly
             app.selected_worktree = "feature-one"
@@ -92,9 +85,9 @@ class TestSidebar:
             # Verify the metadata display is updated
             # Get the inner markdown widget
             from textual.widgets import Markdown
-            markdown = metadata_display.query_one("#description_markdown", Markdown)
+            markdown = metadata_display.query_one("#metadata_markdown", Markdown)
             content = str(markdown._markdown) if hasattr(markdown, '_markdown') else ""
-            assert "user authentication" in content.lower()
+            assert "PR #123" in content  # Content from pr.md
 
     @patch('src.utils.get_active_tmux_sessions')
     @patch('src.utils.get_worktree_pr_status')
@@ -183,3 +176,86 @@ class TestSidebar:
             # Verify we're back to main screen
             assert len(app.screen_stack) == 1
             assert not isinstance(app.screen, ConfirmDeleteScreen)
+
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_auto_select_current_worktree_on_launch(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that Grove auto-selects the worktree user was in when launching."""
+        import os
+        mock_sessions.return_value = set()
+
+        # Change to a specific worktree directory
+        os.chdir(change_to_example_repo / "feature-one")
+
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Verify the worktree is auto-selected
+            assert app.selected_worktree == "feature-one"
+
+            # Verify the sidebar index matches
+            sidebar = app.query_one("#sidebar", ListView)
+            from src.utils import get_worktree_directories
+            worktrees = get_worktree_directories()
+            expected_index = worktrees.index("feature-one")
+            assert sidebar.index == expected_index
+
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_auto_select_from_worktree_subdirectory(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that Grove auto-selects worktree when launched from a subdirectory."""
+        import os
+        mock_sessions.return_value = set()
+
+        # Create a subdirectory in bugfix-01 and change to it
+        subdir = change_to_example_repo / "bugfix-01" / "src" / "utils"
+        subdir.mkdir(parents=True, exist_ok=True)
+        os.chdir(subdir)
+
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Verify the parent worktree (bugfix-01) is auto-selected
+            assert app.selected_worktree == "bugfix-01"
+
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_auto_select_defaults_to_first_from_bare_parent(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that Grove defaults to first worktree when launched from bare parent."""
+        import os
+        mock_sessions.return_value = set()
+
+        # Stay in the bare parent directory (change_to_example_repo is already there)
+        os.chdir(change_to_example_repo)
+
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Verify the first worktree is auto-selected
+            from src.utils import get_worktree_directories
+            worktrees = get_worktree_directories()
+            assert app.selected_worktree == worktrees[0]
+
+    @patch('src.utils.get_active_tmux_sessions')
+    async def test_auto_select_defaults_to_first_from_hidden_directory(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
+        """Test that Grove defaults to first worktree when launched from hidden directory."""
+        import os
+        mock_sessions.return_value = set()
+
+        # Change to .grove/metadata directory
+        hidden_dir = change_to_example_repo / ".grove" / "metadata"
+        hidden_dir.mkdir(parents=True, exist_ok=True)
+        os.chdir(hidden_dir)
+
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+
+            # Verify the first worktree is auto-selected
+            from src.utils import get_worktree_directories
+            worktrees = get_worktree_directories()
+            assert app.selected_worktree == worktrees[0]

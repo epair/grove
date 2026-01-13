@@ -36,46 +36,23 @@
     border: solid $primary;
 }
 
-#metadata_content_switcher_container {
+#metadata_container {
     height: 1fr;
     border: solid $secondary;
 }
 
-#metadata_content_switcher {
-    width: 100%;
-    height: 100%;
-}
-
-#description {
-    padding: 0;
-    margin: 0;
-    height: 100%;
-    border: solid transparent;
-}
-
-#description:focus {
+#metadata_container:focus {
     border: solid $primary;
 }
 
-#pr {
+#metadata {
     padding: 0;
     margin: 0;
     height: 100%;
     border: solid transparent;
 }
 
-#pr:focus {
-    border: solid $primary;
-}
-
-#notes {
-    padding: 0;
-    margin: 0;
-    height: 100%;
-    border: solid transparent;
-}
-
-#notes:focus {
+#metadata:focus {
     border: solid $primary;
 }
 

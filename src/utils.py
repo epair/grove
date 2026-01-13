@@ -30,17 +30,18 @@ def is_bare_git_repository() -> bool:
     return False
 
 def get_bare_parent() -> Path | None:
-    """Get bare parent directory containing .bare subdirectory."""
+    """Get bare parent directory containing .bare subdirectory.
+
+    Traverses up the directory tree to find the .bare directory.
+    """
     current_path = Path.cwd()
-    bare_parent: Path | None = None
 
-    # Find where the .bare directory is located
-    if (current_path / ".bare").is_dir():
-        bare_parent = current_path
-    elif (current_path.parent / ".bare").is_dir():
-        bare_parent = current_path.parent
+    # Traverse up the directory tree looking for .bare
+    for parent in [current_path] + list(current_path.parents):
+        if (parent / ".bare").is_dir():
+            return parent
 
-    return bare_parent
+    return None
 
 def get_tmux_server() -> libtmux.Server | None:
     """Get tmux server instance with error handling."""
@@ -88,23 +89,23 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
                 attach=False
             )
 
-            # Open description.md in Neovim for new sessions
+            # Open pr.md in Neovim for new sessions
             bare_parent = get_bare_parent()
             if bare_parent:
                 # Create metadata directory structure if it doesn't exist
                 metadata_dir = bare_parent / ".grove" / "metadata" / session_name
                 metadata_dir.mkdir(parents=True, exist_ok=True)
 
-                # Create description.md with template if it doesn't exist
-                description_file = metadata_dir / "description.md"
-                if not description_file.exists():
-                    template = "What are you building?"
-                    description_file.write_text(template)
+                # Create pr.md with template if it doesn't exist
+                pr_file = metadata_dir / "pr.md"
+                if not pr_file.exists():
+                    template = "# Pull Request\n\nWhat are you building?\n\n"
+                    pr_file.write_text(template)
 
-                # Open the description file in Neovim in the first pane
+                # Open the pr file in Neovim in the first pane
                 try:
                     first_pane = session.windows[0].panes[0]
-                    first_pane.send_keys(f"nvim {description_file}")
+                    first_pane.send_keys(f"nvim {pr_file}")
                 except Exception:
                     # Continue even if opening Neovim fails
                     pass
@@ -226,29 +227,23 @@ def check_remote_branch_exists(worktree_path: Path) -> bool:
     # If we can't determine, assume it exists to be safe
     return True
 
-def get_worktree_metadata(worktree_name: str) -> dict[str, str]:
-    """Get metadata for a worktree from .grove/metadata/{worktree}/ directory."""
+def get_worktree_metadata(worktree_name: str) -> str:
+    """Get pr.md metadata content for a worktree."""
     bare_parent = get_bare_parent()
 
     if bare_parent is None:
-        return {}
+        return ""
 
     metadata_dir = bare_parent / ".grove" / "metadata" / worktree_name
-    if not metadata_dir.exists():
-        return {}
+    pr_file = metadata_dir / "pr.md"
 
-    metadata = {}
-    for filename in ["description.md", "pr.md", "notes.md"]:
-        file_path = metadata_dir / filename
-        if file_path.exists():
-            try:
-                metadata[filename[:-3]] = file_path.read_text().strip()
-            except (IOError, OSError):
-                metadata[filename[:-3]] = ""
-        else:
-            metadata[filename[:-3]] = ""
+    if pr_file.exists():
+        try:
+            return pr_file.read_text().strip()
+        except (IOError, OSError):
+            return ""
 
-    return metadata
+    return ""
 
 def get_worktree_git_info(worktree_name: str) -> dict[str, str]:
     """Get git information for a worktree (last commit message, date, committer)."""
