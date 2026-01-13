@@ -9,7 +9,7 @@ from textual.widgets import Footer, ListView, ListItem, Label, ContentSwitcher
 from textual.reactive import reactive
 from textual.containers import Vertical, Horizontal
 
-from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, MetadataTopDisplay, TmuxPanePreview, DescriptionDisplay, PRDisplay, NotesDisplay
+from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, TmuxPanePreview, DescriptionDisplay, PRDisplay, NotesDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
 from .utils import (
     get_worktree_directories,
@@ -277,7 +277,7 @@ class GroveApp(App):
                         if has_warning:
                             self.notify(f"{error_msg} Worktree deleted but failed to kill tmux session", severity="warning")
                         else:
-                            self.notify(f"Worktree deleted but failed to kill tmux session", severity="warning")
+                            self.notify('Worktree deleted but failed to kill tmux session', severity="warning")
                         # Refresh sidebar and return early
                         sidebar = self.query_one("#sidebar", Sidebar)
                         sidebar.clear()

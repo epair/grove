@@ -2,7 +2,7 @@
 
 from textual.app import ComposeResult
 from textual.widgets import Label, Input, Button, Checkbox
-from textual.containers import Center, Vertical, Horizontal
+from textual.containers import Vertical, Horizontal
 from textual.screen import ModalScreen
 
 

@@ -760,7 +760,7 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
         if worktree_registered:
             try:
                 repo.git.worktree('remove', '--force', str(worktree_dir))
-            except GitCommandError as e:
+            except GitCommandError:
                 # Continue even if removal fails - we'll try directory removal
                 pass
 

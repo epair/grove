@@ -6,7 +6,7 @@ from textual.widgets import ListView, ListItem, Label, Markdown, Static
 from textual.widget import Widget
 from textual.binding import Binding
 from textual.reactive import reactive
-from textual.containers import VerticalScroll, Horizontal, Vertical
+from textual.containers import VerticalScroll, Horizontal
 from rich.text import Text
 from rich.console import RenderableType
 
