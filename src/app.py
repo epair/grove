@@ -11,6 +11,7 @@ from textual.containers import Vertical, Horizontal
 
 from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, TmuxPanePreview, MetadataDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
+from .config import get_repo_path
 from .utils import (
     get_worktree_directories,
     get_active_tmux_sessions,
@@ -22,7 +23,6 @@ from .utils import (
     get_tmux_server,
     session_exists,
     is_inside_tmux,
-    get_bare_parent
 )
 
 
@@ -74,10 +74,7 @@ class GroveApp(App):
             The worktree name if detected, None otherwise.
         """
         current_path = Path.cwd()
-        bare_parent = get_bare_parent()
-
-        if bare_parent is None:
-            return None
+        bare_parent = get_repo_path()
 
         # Get list of valid worktrees
         worktrees = get_worktree_directories()
@@ -156,17 +153,7 @@ class GroveApp(App):
             return
 
         # Get worktree root directory
-        current_path = Path.cwd()
-        worktree_root = None
-
-        if (current_path / ".bare").is_dir():
-            worktree_root = current_path
-        elif (current_path.parent / ".bare").is_dir():
-            worktree_root = current_path.parent
-
-        if worktree_root is None:
-            self.notify("Could not find worktree root directory", severity="error")
-            return
+        worktree_root = get_repo_path()
 
         # Construct metadata file path
         metadata_dir = worktree_root / ".grove" / "metadata" / self.selected_worktree
@@ -253,18 +240,8 @@ class GroveApp(App):
             # Wait a moment for the worktree to be created
             time.sleep(0.5)
 
-            # Find the worktree root directory (where .bare is located)
-            current_path = Path.cwd()
-            worktree_root = None
-
-            if (current_path / ".bare").is_dir():
-                worktree_root = current_path
-            elif (current_path.parent / ".bare").is_dir():
-                worktree_root = current_path.parent
-
-            if worktree_root is None:
-                self.notify("Could not find worktree root directory", severity="error")
-                return
+            # Get the worktree root directory
+            worktree_root = get_repo_path()
 
             # Create or switch to tmux session
             worktree_path = worktree_root / name
@@ -382,16 +359,7 @@ class GroveApp(App):
 
         # Find the worktree root directory
         current_path = Path.cwd()
-        worktree_root = None
-
-        if (current_path / ".bare").is_dir():
-            worktree_root = current_path
-        elif (current_path.parent / ".bare").is_dir():
-            worktree_root = current_path.parent
-
-        if worktree_root is None:
-            self.notify("Could not find worktree root directory", severity="error")
-            return
+        worktree_root = get_repo_path()
 
         worktree_path = worktree_root / self.selected_worktree
         if not worktree_path.exists():
@@ -549,18 +517,8 @@ class GroveApp(App):
         if not self.selected_worktree:
             return
 
-        # Find the worktree root directory
-        current_path = Path.cwd()
-        worktree_root = None
-
-        if (current_path / ".bare").is_dir():
-            worktree_root = current_path
-        elif (current_path.parent / ".bare").is_dir():
-            worktree_root = current_path.parent
-
-        if worktree_root is None:
-            self.notify("Could not find worktree root directory", severity="error")
-            return
+        # Get the worktree root directory
+        worktree_root = get_repo_path()
 
         # Construct the full path to the worktree
         worktree_path = worktree_root / self.selected_worktree
@@ -592,17 +550,7 @@ class GroveApp(App):
 
     def cleanup_orphaned_worktrees(self) -> None:
         """Clean up worktrees that have published PRs but no remote branch."""
-        current_path = Path.cwd()
-        bare_parent: Path | None = None
-
-        # Find where the .bare directory is located
-        if (current_path / ".bare").is_dir():
-            bare_parent = current_path
-        elif (current_path.parent / ".bare").is_dir():
-            bare_parent = current_path.parent
-
-        if bare_parent is None:
-            return
+        bare_parent = get_repo_path()
 
         # Get worktrees with published PRs
         pr_worktrees = get_worktree_pr_status()

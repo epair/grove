@@ -27,13 +27,16 @@ class TestBareRepository:
         assert ".grove" not in directories
 
     def test_get_worktree_directories_outside_bare_repo(self, tmp_path: Path) -> None:
-        """Test that get_worktree_directories returns empty list when not in a bare repo."""
+        """Test that get_worktree_directories works based on config, not current directory."""
         original_cwd = os.getcwd()
         os.chdir(tmp_path)
 
         try:
+            # With config-based system, worktrees are found via config regardless of cwd
             directories = get_worktree_directories()
-            assert directories == []
+            # Should still find the configured repo's worktrees
+            expected_directories = ["bugfix-01", "feature-one"]
+            assert directories == expected_directories
         finally:
             os.chdir(original_cwd)
 

@@ -1,7 +1,9 @@
 """Modal screens for Grove application."""
 
+from pathlib import Path
+
 from textual.app import ComposeResult
-from textual.widgets import Label, Input, Button, Checkbox
+from textual.widgets import Label, Input, Button, Checkbox, ListView, ListItem
 from textual.containers import Vertical, Horizontal
 from textual.screen import ModalScreen
 
@@ -154,4 +156,131 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
 
     def action_cancel(self) -> None:
         """Cancel the form and return to main app."""
+        self.dismiss(None)
+
+
+class SetupWizardScreen(ModalScreen[str | None]):
+    """A modal screen for first-time setup to configure repository path."""
+
+    BINDINGS = [
+        ("escape", "cancel", "Exit"),
+        ("c", "custom_path", "Custom path"),
+    ]
+
+    def __init__(self, detected_repos: list[Path]) -> None:
+        """Initialize the setup wizard.
+
+        Args:
+            detected_repos: List of auto-detected repository paths
+        """
+        super().__init__()
+        self.detected_repos = detected_repos
+        self.is_custom_mode = False
+
+    def compose(self) -> ComposeResult:
+        """Create the setup wizard layout."""
+        with Vertical(id="setup_dialog"):
+            yield Label("🌲 Grove Setup Wizard", id="setup_title")
+            yield Label("No configuration found. Please select your repository:", id="setup_message")
+
+            if self.detected_repos:
+                yield Label(f"Detected {len(self.detected_repos)} potential repositories:", id="detected_label")
+                # Create a ListView with detected repositories
+                with ListView(id="repo_list"):
+                    for repo in self.detected_repos:
+                        yield ListItem(Label(str(repo)))
+                yield Label("Press Enter to select, or press 'c' for custom path", id="setup_hint")
+            else:
+                yield Label("No repositories detected.", id="no_repos_label")
+                yield Label("Press 'c' to enter a custom path", id="custom_hint")
+
+            # Custom path input (initially hidden)
+            yield Label("Enter repository path:", id="custom_label", classes="hidden")
+            yield Input(placeholder="/path/to/repo", id="custom_input", classes="hidden")
+
+            with Horizontal(id="setup_button_container"):
+                yield Button("Exit (Esc)", variant="default", id="exit_button")
+                yield Button("Confirm", variant="primary", id="confirm_button", classes="hidden")
+
+    def action_custom_path(self) -> None:
+        """Switch to custom path entry mode."""
+        self.is_custom_mode = True
+
+        # Hide repo list and show custom input
+        try:
+            self.query_one("#repo_list").add_class("hidden")
+            self.query_one("#detected_label").add_class("hidden")
+            self.query_one("#setup_hint").add_class("hidden")
+        except Exception:
+            # Elements might not exist if no repos detected
+            pass
+
+        try:
+            self.query_one("#no_repos_label").add_class("hidden")
+            self.query_one("#custom_hint").add_class("hidden")
+        except Exception:
+            # Elements might not exist if repos were detected
+            pass
+
+        self.query_one("#custom_label").remove_class("hidden")
+        self.query_one("#custom_input").remove_class("hidden")
+        self.query_one("#confirm_button").remove_class("hidden")
+
+        # Focus the input
+        self.query_one("#custom_input", Input).focus()
+
+    def on_list_view_selected(self, message: ListView.Selected) -> None:
+        """Handle selection from detected repositories list."""
+        # Get the index of the selected item and use it to get the path from our list
+        list_view = self.query_one("#repo_list", ListView)
+        selected_index = list_view.index
+        if selected_index is not None and selected_index < len(self.detected_repos):
+            selected_path = str(self.detected_repos[selected_index])
+            self.dismiss(selected_path)
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events."""
+        if event.button.id == "confirm_button":
+            custom_path = self.query_one("#custom_input", Input).value.strip()
+
+            if not custom_path:
+                self.notify("Please enter a path", severity="warning")
+                return
+
+            # Validate path
+            path_obj = Path(custom_path).expanduser()
+            if not path_obj.exists():
+                self.notify(f"Path does not exist: {custom_path}", severity="error")
+                return
+
+            if not (path_obj / ".bare").is_dir():
+                self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
+                return
+
+            self.dismiss(str(path_obj.resolve()))
+        elif event.button.id == "exit_button":
+            self.dismiss(None)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in custom path input."""
+        if event.input.id == "custom_input":
+            custom_path = event.input.value.strip()
+
+            if not custom_path:
+                self.notify("Please enter a path", severity="warning")
+                return
+
+            path_obj = Path(custom_path).expanduser()
+            if not path_obj.exists():
+                self.notify(f"Path does not exist: {custom_path}", severity="error")
+                return
+
+            if not (path_obj / ".bare").is_dir():
+                self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
+                return
+
+            self.dismiss(str(path_obj.resolve()))
+
+    def action_cancel(self) -> None:
+        """Exit the wizard."""
         self.dismiss(None)

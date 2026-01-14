@@ -273,3 +273,93 @@ PRFormScreen {
     padding: 0 1;
     align-horizontal: right;
 }
+
+/* Setup wizard modal styling */
+SetupWizardScreen {
+    align: center middle;
+}
+
+#setup_dialog {
+    width: 70;
+    height: auto;
+    max-height: 95%;
+    padding: 1 2;
+    border: thick $primary 80%;
+    background: $surface;
+}
+
+#setup_title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+    color: $primary;
+}
+
+#setup_message {
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#detected_label {
+    margin-bottom: 1;
+}
+
+#repo_list {
+    height: auto;
+    max-height: 20;
+    margin-bottom: 1;
+    border: solid $secondary;
+}
+
+#repo_list:focus {
+    border: solid $primary;
+}
+
+#setup_hint {
+    text-align: center;
+    margin-bottom: 1;
+    color: $accent;
+    text-style: italic;
+}
+
+#no_repos_label {
+    text-align: center;
+    margin-bottom: 1;
+    color: $warning;
+}
+
+#custom_hint {
+    text-align: center;
+    margin-bottom: 1;
+    color: $accent;
+    text-style: italic;
+}
+
+#custom_label {
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+#custom_input {
+    margin-bottom: 1;
+}
+
+#exit_button {
+    margin-right: 2;
+    min-width: 12;
+}
+
+#confirm_button {
+    min-width: 12;
+}
+
+#setup_button_container {
+    width: 100%;
+    margin-top: 1;
+    padding: 0 1;
+    align-horizontal: right;
+}
+
+.hidden {
+    display: none;
+}

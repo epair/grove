@@ -21,10 +21,11 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 - **Main Application**: `src/` - Modular Python package using Python 3.13+
   - `src/app.py` - GroveApp main application class
   - `src/widgets.py` - Sidebar and MetadataDisplay widgets
-  - `src/screens.py` - Modal screens (WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen)
+  - `src/screens.py` - Modal screens (WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen, SetupWizardScreen)
+  - `src/config.py` - TOML configuration management (repository location, setup wizard)
   - `src/utils.py` - Utility functions for git, tmux, and metadata operations
   - `src/__init__.py` - Package exports
-  - `src/__main__.py` - Entry point with main() function
+  - `src/__main__.py` - Entry point with main() function and setup wizard integration
 - **Styling**: `app.tcss` - Textual CSS for UI styling
 - **Testing**: `tests/` - Comprehensive test suite covering all functionality
 - **Test Data**: `tests/example_repo/` - Bare git repository structure for testing
@@ -43,6 +44,15 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 - `WorktreeFormScreen`: Modal form for creating new worktrees (branch name and path)
 - `ConfirmDeleteScreen`: Modal confirmation dialog for worktree deletion
 - `PRFormScreen`: Modal form for creating pull requests
+- `SetupWizardScreen`: First-time setup wizard for configuring repository location
+
+**Configuration** (`src/config.py`):
+- `get_config_path()`: Returns path to config file (~/.config/grove/config)
+- `config_exists()`: Checks if config file exists
+- `load_config()`: Loads and validates TOML configuration
+- `save_config()`: Saves repository path to config file
+- `get_repo_path()`: Gets repository path from config (replaces old .bare detection)
+- `detect_potential_repositories()`: Auto-detects .bare repositories for setup wizard
 
 **Utilities** (`src/utils.py`):
 - `is_bare_git_repository()`: Validates the environment is a bare git repo
@@ -59,7 +69,17 @@ The tool essentially bridges the gap between Git worktree management and tmux se
 
 **Run the application:**
 ```bash
-python -m src  # Must be run from a bare git repository directory
+python -m src  # Can be run from any directory (uses config file)
+```
+
+**First-time setup:**
+```bash
+python -m src  # Automatically shows setup wizard if no config exists
+```
+
+**Re-run setup wizard:**
+```bash
+rm ~/.config/grove/config && python -m src
 ```
 
 **Syntax check:**
@@ -84,14 +104,49 @@ mypy src/
 
 **Note:** Always use `python -m pytest` instead of `pytest` directly to ensure proper Python path setup for module imports. The codebase uses comprehensive type hints throughout - all functions should include return type annotations and parameter types where applicable.
 
+## Configuration
+
+Grove uses a TOML configuration file to store the repository location. The config file is stored at `~/.config/grove/config`.
+
+**First-Time Setup:**
+On first run, Grove will automatically launch a setup wizard that:
+1. Auto-detects potential .bare repositories on your system (searches current directory, parent directories up to 5 levels, and common project directories like `~/code/projects`, `~/projects`, `~/dev`, `~/workspace`)
+2. Presents detected repositories in a selectable list
+3. Allows you to press 'c' to enter a custom repository path
+4. Validates that the selected path contains a `.bare` directory
+5. Saves the configuration to `~/.config/grove/config`
+
+**Config File Structure:**
+```toml
+[grove]
+config_version = "1.0"
+
+[repository]
+repo_path = "/path/to/your/repository"
+```
+
+**Troubleshooting:**
+- If Grove shows a config error, check `~/.config/grove/config`
+- You can delete the config file to re-run the setup wizard
+- The repository path must be the parent directory of `.bare` (not the `.bare` directory itself)
+- Grove validates that the configured path exists and contains a `.bare` directory on startup
+
+**Important:** Unlike previous versions, Grove now works from any directory - the repository location comes from the config file, not your current working directory.
+
 ## Requirements
 
-- The application must be run from a directory containing a `.bare` subdirectory (bare git repository setup)
-- Python 3.13+ with `textual` library installed
+- Python 3.13+ with required dependencies:
+  - `textual` (v6.0+) - TUI framework
+  - `gitpython` (v3.1+) - Git operations
+  - `libtmux` (v0.46+) - Tmux integration
+  - `tomli-w` (v1.0+) - TOML config file writing
+- A bare git repository with `.bare` directory structure
+- First-time setup via the setup wizard (runs automatically)
 
 ## Key Behavior
 
-- Application exits with error if not run from a bare git repository
+- Application validates configuration file on startup (shows setup wizard if missing)
+- Works from any directory (repository location comes from config, not current directory)
 - Discovers and lists directories at the same level as `.bare` directory with tmux session indicators
 - Excludes hidden directories (starting with `.`) from the sidebar
 - Displays worktree PR information as formatted markdown in a single view

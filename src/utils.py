@@ -9,6 +9,8 @@ from git import Repo
 from git.exc import GitCommandError
 import libtmux
 
+from .config import get_repo_path, ConfigError
+
 # Cache for tmux pane preview data to improve performance
 # Structure: {worktree_name: (timestamp, pane_data)}
 _tmux_pane_cache: dict[str, tuple[float, list[dict[str, str | bool]] | str]] = {}
@@ -29,19 +31,6 @@ def is_bare_git_repository() -> bool:
 
     return False
 
-def get_bare_parent() -> Path | None:
-    """Get bare parent directory containing .bare subdirectory.
-
-    Traverses up the directory tree to find the .bare directory.
-    """
-    current_path = Path.cwd()
-
-    # Traverse up the directory tree looking for .bare
-    for parent in [current_path] + list(current_path.parents):
-        if (parent / ".bare").is_dir():
-            return parent
-
-    return None
 
 def get_tmux_server() -> libtmux.Server | None:
     """Get tmux server instance with error handling."""
@@ -90,25 +79,25 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
             )
 
             # Open pr.md in Neovim for new sessions
-            bare_parent = get_bare_parent()
-            if bare_parent:
-                # Create metadata directory structure if it doesn't exist
-                metadata_dir = bare_parent / ".grove" / "metadata" / session_name
-                metadata_dir.mkdir(parents=True, exist_ok=True)
+            bare_parent = get_repo_path()
 
-                # Create pr.md with template if it doesn't exist
-                pr_file = metadata_dir / "pr.md"
-                if not pr_file.exists():
-                    template = "# Pull Request\n\nWhat are you building?\n\n"
-                    pr_file.write_text(template)
+            # Create metadata directory structure if it doesn't exist
+            metadata_dir = bare_parent / ".grove" / "metadata" / session_name
+            metadata_dir.mkdir(parents=True, exist_ok=True)
 
-                # Open the pr file in Neovim in the first pane
-                try:
-                    first_pane = session.windows[0].panes[0]
-                    first_pane.send_keys(f"nvim {pr_file}")
-                except Exception:
-                    # Continue even if opening Neovim fails
-                    pass
+            # Create pr.md with template if it doesn't exist
+            pr_file = metadata_dir / "pr.md"
+            if not pr_file.exists():
+                template = "# Pull Request\n\nWhat are you building?\n\n"
+                pr_file.write_text(template)
+
+            # Open the pr file in Neovim in the first pane
+            try:
+                first_pane = session.windows[0].panes[0]
+                first_pane.send_keys(f"nvim {pr_file}")
+            except Exception:
+                # Continue even if opening Neovim fails
+                pass
 
             # Run session hydration if .tmux-sessionizer file exists
             hydration_script = None
@@ -154,10 +143,7 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
 
 def get_worktree_directories() -> list[str]:
     """Get directories at the same level as .bare directory, excluding hidden directories."""
-    bare_parent = get_bare_parent()
-
-    if bare_parent is None:
-        return []
+    bare_parent = get_repo_path()
 
     # Get all directories at the same level as .bare, excluding hidden ones
     directories: list[str] = []
@@ -179,7 +165,7 @@ def get_active_tmux_sessions() -> set[str]:
 
 def get_worktree_pr_status() -> set[str]:
     """Get names of worktrees that have a PR published."""
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return set()
@@ -229,7 +215,7 @@ def check_remote_branch_exists(worktree_path: Path) -> bool:
 
 def get_worktree_metadata(worktree_name: str) -> str:
     """Get pr.md metadata content for a worktree."""
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return ""
@@ -247,7 +233,7 @@ def get_worktree_metadata(worktree_name: str) -> str:
 
 def get_worktree_git_info(worktree_name: str) -> dict[str, str]:
     """Get git information for a worktree (last commit message, date, committer)."""
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return {"commit_message": "N/A", "commit_date": "N/A", "committer": "N/A"}
@@ -279,7 +265,7 @@ def get_worktree_git_status(worktree_name: str) -> dict[str, list[str]]:
     Returns:
         Dict with keys 'staged', 'unstaged', 'untracked' containing lists of file paths
     """
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return {"staged": [], "unstaged": [], "untracked": []}
@@ -345,7 +331,7 @@ def get_worktree_git_log(worktree_name: str) -> dict[str, Any]:
         - 'comparison_branch': str - name of branch being compared against
         - 'commits': list of dicts with 'hash', 'message', 'author', 'date', 'is_pushed'
     """
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return {
@@ -626,7 +612,7 @@ def create_worktree_with_branch(name: str, prefix: str) -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, error_message: str)
     """
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return False, "Could not find .bare directory"
@@ -694,7 +680,7 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
     Returns:
         Tuple of (success: bool, error_message: str)
     """
-    bare_parent = get_bare_parent()
+    bare_parent = get_repo_path()
 
     if bare_parent is None:
         return False, "Could not find .bare directory"
