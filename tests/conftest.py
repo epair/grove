@@ -40,12 +40,20 @@ def mock_config(
     config_dir.mkdir(parents=True, exist_ok=True)
     config_file = config_dir / "config"
 
-    # Write config with example_repo path
+    # Write config with v2.0 format
     import tomli_w
 
     config_data = {
-        "grove": {"config_version": "1.0"},
-        "repository": {"repo_path": str(example_repo_path)},
+        "grove": {
+            "config_version": "2.0",
+            "last_used": str(example_repo_path),
+        },
+        "repositories": [
+            {
+                "name": example_repo_path.name,
+                "path": str(example_repo_path),
+            }
+        ],
     }
     with open(config_file, "wb") as f:
         tomli_w.dump(config_data, f)
@@ -54,5 +62,8 @@ def mock_config(
     from src import config
 
     monkeypatch.setattr(config, "get_config_path", lambda: config_file)
+
+    # Set active repository for tests
+    config.set_active_repo(example_repo_path)
 
     return config_file

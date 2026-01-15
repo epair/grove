@@ -9,8 +9,15 @@ from src.config import (
     get_config_path,
     config_exists,
     load_config,
-    save_config,
+    get_repositories,
+    add_repository,
+    remove_repository,
+    update_last_used,
+    set_active_repo,
+    get_active_repo,
     get_repo_path,
+    find_repo_for_directory,
+    migrate_v1_to_v2,
     detect_potential_repositories,
     ConfigError,
 )
@@ -49,16 +56,45 @@ class TestConfigPath:
 class TestLoadConfig:
     """Tests for loading configuration."""
 
-    def test_load_config_success(
+    def test_load_config_v2_success(
         self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test successfully loading a valid config file."""
-        # Create a valid config file
+        """Test successfully loading a valid v2.0 config file."""
+        # Create a valid v2.0 config file
         config_dir = tmp_path / ".config" / "grove"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config"
 
-        # Write valid TOML config
+        # Write valid v2.0 TOML config
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0", "last_used": str(example_repo_path)},
+            "repositories": [{"name": "example_repo", "path": str(example_repo_path)}],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        # Mock get_config_path
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Load config
+        config = load_config()
+
+        assert config["grove"]["config_version"] == "2.0"
+        assert config["repositories"][0]["path"] == str(example_repo_path)
+        assert config["repositories"][0]["name"] == "example_repo"
+
+    def test_load_config_v1_auto_migration(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that v1.0 config is auto-migrated to v2.0."""
+        # Create a v1.0 config file
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Write v1.0 TOML config
         import tomli_w
 
         config_data = {
@@ -71,11 +107,20 @@ class TestLoadConfig:
         # Mock get_config_path
         monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
 
-        # Load config
+        # Load config - should auto-migrate
         config = load_config()
 
-        assert config["repo_path"] == str(example_repo_path.resolve())
-        assert config["config_version"] == "1.0"
+        # Should now be v2.0 format
+        assert config["grove"]["config_version"] == "2.0"
+        assert len(config["repositories"]) == 1
+        assert config["repositories"][0]["path"] == str(example_repo_path)
+        assert config["repositories"][0]["name"] == example_repo_path.name
+        assert config["grove"]["last_used"] == str(example_repo_path)
+
+        # Verify migration was saved to file
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+        assert saved_data["grove"]["config_version"] == "2.0"
 
     def test_load_config_missing_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that loading missing config raises ConfigError."""
@@ -99,44 +144,47 @@ class TestLoadConfig:
         with pytest.raises(ConfigError, match="Invalid TOML syntax"):
             load_config()
 
-    def test_load_config_missing_repository_section(
+    def test_load_config_missing_repositories_section(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that missing [repository] section raises ConfigError."""
+        """Test that missing [[repositories]] section raises ConfigError."""
         config_dir = tmp_path / ".config" / "grove"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config"
 
-        # Write TOML without [repository] section
+        # Write v2.0 TOML without [[repositories]] section
         import tomli_w
 
-        config_data = {"grove": {"config_version": "1.0"}}
+        config_data = {"grove": {"config_version": "2.0"}}
         with open(config_file, "wb") as f:
             tomli_w.dump(config_data, f)
 
         monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
 
-        with pytest.raises(ConfigError, match="Config missing \\[repository\\] section"):
+        with pytest.raises(ConfigError, match="Config missing or invalid \\[\\[repositories\\]\\] section"):
             load_config()
 
-    def test_load_config_missing_repo_path(
+    def test_load_config_missing_repo_path_field(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that missing repo_path field raises ConfigError."""
+        """Test that repository missing 'path' field raises ConfigError."""
         config_dir = tmp_path / ".config" / "grove"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config"
 
-        # Write TOML without repo_path
+        # Write v2.0 TOML with repository missing path
         import tomli_w
 
-        config_data = {"grove": {"config_version": "1.0"}, "repository": {}}
+        config_data = {
+            "grove": {"config_version": "2.0"},
+            "repositories": [{"name": "test"}],  # Missing path field
+        }
         with open(config_file, "wb") as f:
             tomli_w.dump(config_data, f)
 
         monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
 
-        with pytest.raises(ConfigError, match="Config missing 'repo_path'"):
+        with pytest.raises(ConfigError, match="Repository missing 'path' field"):
             load_config()
 
     def test_load_config_invalid_repo_path(
@@ -147,12 +195,12 @@ class TestLoadConfig:
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config"
 
-        # Write config with non-existent path
+        # Write v2.0 config with non-existent path
         import tomli_w
 
         config_data = {
-            "grove": {"config_version": "1.0"},
-            "repository": {"repo_path": "/nonexistent/path"},
+            "grove": {"config_version": "2.0"},
+            "repositories": [{"name": "test", "path": "/nonexistent/path"}],
         }
         with open(config_file, "wb") as f:
             tomli_w.dump(config_data, f)
@@ -174,12 +222,12 @@ class TestLoadConfig:
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config"
 
-        # Write config pointing to directory without .bare
+        # Write v2.0 config pointing to directory without .bare
         import tomli_w
 
         config_data = {
-            "grove": {"config_version": "1.0"},
-            "repository": {"repo_path": str(repo_dir)},
+            "grove": {"config_version": "2.0"},
+            "repositories": [{"name": "repo", "path": str(repo_dir)}],
         }
         with open(config_file, "wb") as f:
             tomli_w.dump(config_data, f)
@@ -189,15 +237,15 @@ class TestLoadConfig:
         with pytest.raises(ConfigError, match="does not contain .bare directory"):
             load_config()
 
-    def test_load_config_default_version(
+    def test_load_config_default_version_triggers_migration(
         self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that config_version defaults to 1.0 if missing."""
+        """Test that config without version defaults to 1.0 and triggers migration."""
         config_dir = tmp_path / ".config" / "grove"
         config_dir.mkdir(parents=True)
         config_file = config_dir / "config"
 
-        # Write config without config_version
+        # Write config without config_version (defaults to 1.0)
         import tomli_w
 
         config_data = {"repository": {"repo_path": str(example_repo_path)}}
@@ -207,124 +255,17 @@ class TestLoadConfig:
         monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
 
         config = load_config()
-        assert config["config_version"] == "1.0"
-
-
-class TestSaveConfig:
-    """Tests for saving configuration."""
-
-    def test_save_config_success(
-        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test successfully saving a config file."""
-        config_dir = tmp_path / ".config" / "grove"
-        config_file = config_dir / "config"
-
-        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
-
-        # Save config
-        save_config(str(example_repo_path))
-
-        # Verify file was created
-        assert config_file.exists()
-
-        # Verify content
-        with open(config_file, "rb") as f:
-            saved_data = tomllib.load(f)
-
-        assert "grove" in saved_data
-        assert saved_data["grove"]["config_version"] == "1.0"
-        assert "repository" in saved_data
-        assert saved_data["repository"]["repo_path"] == str(example_repo_path.resolve())
-
-    def test_save_config_creates_directory(
-        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test that save_config creates config directory if it doesn't exist."""
-        config_dir = tmp_path / ".config" / "grove"
-        config_file = config_dir / "config"
-
-        # Verify directory doesn't exist yet
-        assert not config_dir.exists()
-
-        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
-
-        # Save config
-        save_config(str(example_repo_path))
-
-        # Verify directory was created
-        assert config_dir.exists()
-        assert config_file.exists()
-
-    def test_save_config_invalid_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Test that saving config with invalid path raises ConfigError."""
-        config_dir = tmp_path / ".config" / "grove"
-        config_file = config_dir / "config"
-
-        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
-
-        # Try to save config with non-existent path
-        with pytest.raises(ConfigError, match="Invalid repository path"):
-            save_config("/nonexistent/path")
-
-    def test_save_config_no_bare_directory(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test that saving config with path without .bare raises ConfigError."""
-        # Create directory without .bare
-        repo_dir = tmp_path / "repo"
-        repo_dir.mkdir()
-
-        config_dir = tmp_path / ".config" / "grove"
-        config_file = config_dir / "config"
-
-        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
-
-        with pytest.raises(ConfigError, match="Invalid repository path"):
-            save_config(str(repo_dir))
-
-    def test_save_config_expands_home(
-        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test that save_config expands ~ in paths."""
-        config_dir = tmp_path / ".config" / "grove"
-        config_file = config_dir / "config"
-
-        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
-
-        # Save config with absolute path
-        save_config(str(example_repo_path))
-
-        # Load and verify it's absolute
-        with open(config_file, "rb") as f:
-            saved_data = tomllib.load(f)
-
-        saved_path = Path(saved_data["repository"]["repo_path"])
-        assert saved_path.is_absolute()
+        # Should be migrated to v2.0
+        assert config["grove"]["config_version"] == "2.0"
 
 
 class TestGetRepoPath:
-    """Tests for getting repository path from config."""
+    """Tests for getting repository path (active repository)."""
 
-    def test_get_repo_path_success(
-        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Test successfully getting repo path from config."""
-        config_dir = tmp_path / ".config" / "grove"
-        config_dir.mkdir(parents=True)
-        config_file = config_dir / "config"
-
-        # Write valid config
-        import tomli_w
-
-        config_data = {
-            "grove": {"config_version": "1.0"},
-            "repository": {"repo_path": str(example_repo_path)},
-        }
-        with open(config_file, "wb") as f:
-            tomli_w.dump(config_data, f)
-
-        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+    def test_get_repo_path_success(self, example_repo_path: Path) -> None:
+        """Test successfully getting repo path when active repo is set."""
+        # Set active repo
+        set_active_repo(example_repo_path)
 
         # Get repo path
         repo_path = get_repo_path()
@@ -332,15 +273,336 @@ class TestGetRepoPath:
         assert repo_path == example_repo_path.resolve()
         assert isinstance(repo_path, Path)
 
-    def test_get_repo_path_missing_config(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    def test_get_repo_path_no_active_repo(self) -> None:
+        """Test that get_repo_path raises ConfigError when no active repo is set."""
+        # Reset global state
+        import src.config
+        src.config._active_repo_path = None
+
+        with pytest.raises(ConfigError, match="No active repository set"):
+            get_repo_path()
+
+
+class TestGetRepositories:
+    """Tests for getting list of repositories."""
+
+    def test_get_repositories_success(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that get_repo_path raises ConfigError when config is missing."""
+        """Test getting list of repositories from config."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Write v2.0 config with multiple repos
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0"},
+            "repositories": [
+                {"name": "repo1", "path": str(example_repo_path)},
+                {"name": "repo2", "path": str(example_repo_path)},
+            ],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        repos = get_repositories()
+
+        assert len(repos) == 2
+        assert repos[0]["name"] == "repo1"
+        assert repos[1]["name"] == "repo2"
+
+    def test_get_repositories_empty_when_no_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that get_repositories returns empty list when no config exists."""
         mock_config_path = tmp_path / "nonexistent" / "config"
         monkeypatch.setattr("src.config.get_config_path", lambda: mock_config_path)
 
-        with pytest.raises(ConfigError, match="Config file not found"):
-            get_repo_path()
+        repos = get_repositories()
+        assert repos == []
+
+
+class TestAddRepository:
+    """Tests for adding repositories."""
+
+    def test_add_repository_success(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test successfully adding a repository."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_file = config_dir / "config"
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Add repository
+        add_repository(str(example_repo_path))
+
+        # Verify file was created and contains repository
+        assert config_file.exists()
+
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        assert saved_data["grove"]["config_version"] == "2.0"
+        assert len(saved_data["repositories"]) == 1
+        assert saved_data["repositories"][0]["path"] == str(example_repo_path.resolve())
+        assert saved_data["repositories"][0]["name"] == example_repo_path.name
+
+    def test_add_repository_auto_generates_name(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that add_repository auto-generates name from directory name."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_file = config_dir / "config"
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        add_repository(str(example_repo_path))
+
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        assert saved_data["repositories"][0]["name"] == example_repo_path.name
+
+    def test_add_repository_duplicate_updates_name(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that adding duplicate path updates the name."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_file = config_dir / "config"
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Add repository twice
+        add_repository(str(example_repo_path))
+        add_repository(str(example_repo_path))
+
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        # Should only have one repository (not duplicated)
+        assert len(saved_data["repositories"]) == 1
+
+    def test_add_repository_invalid_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test that adding invalid path raises ConfigError."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_file = config_dir / "config"
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        with pytest.raises(ConfigError, match="Invalid repository path"):
+            add_repository("/nonexistent/path")
+
+
+class TestRemoveRepository:
+    """Tests for removing repositories."""
+
+    def test_remove_repository_success(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test successfully removing a repository."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Create a second test repository
+        repo2_dir = tmp_path / "repo2"
+        repo2_dir.mkdir()
+        (repo2_dir / ".bare").mkdir()
+
+        # Create config with two repositories
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0"},
+            "repositories": [
+                {"name": "repo1", "path": str(example_repo_path)},
+                {"name": "repo2", "path": str(repo2_dir)},
+            ],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Remove first repository
+        remove_repository(str(example_repo_path))
+
+        # Verify repository was removed
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        assert len(saved_data["repositories"]) == 1
+        assert saved_data["repositories"][0]["name"] == "repo2"
+
+    def test_remove_repository_clears_last_used(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that removing repository that was last_used removes the field."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Create config with repository as last_used
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0", "last_used": str(example_repo_path)},
+            "repositories": [{"name": "repo1", "path": str(example_repo_path)}],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Remove repository
+        remove_repository(str(example_repo_path))
+
+        # Verify last_used field was removed (not just set to None)
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        assert "last_used" not in saved_data.get("grove", {})
+
+
+class TestUpdateLastUsed:
+    """Tests for updating last_used repository."""
+
+    def test_update_last_used_success(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test successfully updating last_used field."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Create initial config
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0"},
+            "repositories": [{"name": "repo1", "path": str(example_repo_path)}],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Update last_used
+        update_last_used(str(example_repo_path))
+
+        # Verify last_used was updated
+        with open(config_file, "rb") as f:
+            saved_data = tomllib.load(f)
+
+        assert saved_data["grove"]["last_used"] == str(example_repo_path.resolve())
+
+
+class TestSetActiveRepo:
+    """Tests for setting active repository."""
+
+    def test_set_active_repo_success(self, example_repo_path: Path) -> None:
+        """Test successfully setting active repository."""
+        set_active_repo(example_repo_path)
+
+        assert get_active_repo() == example_repo_path.resolve()
+
+    def test_set_active_repo_invalid_path(self, tmp_path: Path) -> None:
+        """Test that setting invalid path raises ConfigError."""
+        invalid_path = tmp_path / "nonexistent"
+
+        with pytest.raises(ConfigError, match="Repository path does not exist"):
+            set_active_repo(invalid_path)
+
+    def test_set_active_repo_no_bare_directory(self, tmp_path: Path) -> None:
+        """Test that setting path without .bare raises ConfigError."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+
+        with pytest.raises(ConfigError, match="does not contain .bare directory"):
+            set_active_repo(repo_dir)
+
+
+class TestFindRepoForDirectory:
+    """Tests for finding repository containing a directory."""
+
+    def test_find_repo_for_directory_inside_repo(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test finding repository when cwd is inside it."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Create config
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0"},
+            "repositories": [{"name": "repo1", "path": str(example_repo_path)}],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Find repo for a directory inside it
+        found_repo = find_repo_for_directory(example_repo_path / "feature-one")
+
+        assert found_repo == example_repo_path.resolve()
+
+    def test_find_repo_for_directory_outside_repo(
+        self, tmp_path: Path, example_repo_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that finding repository returns None when cwd is outside all repos."""
+        config_dir = tmp_path / ".config" / "grove"
+        config_dir.mkdir(parents=True)
+        config_file = config_dir / "config"
+
+        # Create config
+        import tomli_w
+
+        config_data = {
+            "grove": {"config_version": "2.0"},
+            "repositories": [{"name": "repo1", "path": str(example_repo_path)}],
+        }
+        with open(config_file, "wb") as f:
+            tomli_w.dump(config_data, f)
+
+        monkeypatch.setattr("src.config.get_config_path", lambda: config_file)
+
+        # Find repo for a directory outside any repo
+        found_repo = find_repo_for_directory(tmp_path / "other_dir")
+
+        assert found_repo is None
+
+
+class TestMigrateV1ToV2:
+    """Tests for config migration."""
+
+    def test_migrate_v1_to_v2_success(self, example_repo_path: Path) -> None:
+        """Test successfully migrating v1.0 config to v2.0."""
+        v1_config = {
+            "grove": {"config_version": "1.0"},
+            "repository": {"repo_path": str(example_repo_path)},
+        }
+
+        v2_config = migrate_v1_to_v2(v1_config)
+
+        assert v2_config["grove"]["config_version"] == "2.0"
+        assert v2_config["grove"]["last_used"] == str(example_repo_path)
+        assert len(v2_config["repositories"]) == 1
+        assert v2_config["repositories"][0]["name"] == example_repo_path.name
+        assert v2_config["repositories"][0]["path"] == str(example_repo_path)
+
+    def test_migrate_v1_to_v2_missing_fields(self) -> None:
+        """Test that migration raises error for invalid v1.0 config."""
+        v1_config = {"grove": {"config_version": "1.0"}}
+
+        with pytest.raises(ConfigError, match="Invalid v1.0 config"):
+            migrate_v1_to_v2(v1_config)
 
 
 class TestDetectPotentialRepositories:

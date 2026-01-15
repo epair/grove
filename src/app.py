@@ -36,9 +36,15 @@ class GroveApp(App):
         ("d", "delete_worktree", "Delete worktree"),
         ("p", "create_pr", "Create PR"),
         ("e", "edit_metadata", "Edit metadata"),
+        ("ctrl+r", "switch_repository", "Switch Repository"),
     ]
 
     selected_worktree = reactive("")
+
+    def __init__(self) -> None:
+        """Initialize the Grove app."""
+        super().__init__()
+        self.restart_with_different_repo = False
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -613,3 +619,22 @@ class GroveApp(App):
                     sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
             else:
                 sidebar.append(ListItem(Label("No directories found")))
+
+    def action_switch_repository(self) -> None:
+        """Show repository selection screen and restart with selected repo."""
+        from .config import get_repositories
+        from .screens import RepositorySelectionScreen
+
+        repos = get_repositories()
+
+        def handle_selection(selected_path: str | None) -> None:
+            if selected_path:
+                # User selected a different repo
+                current_repo = get_repo_path()
+                if Path(selected_path) != current_repo:
+                    # Mark for restart
+                    self.restart_with_different_repo = True
+                    self.exit()
+            # If None (cancelled) or same repo, do nothing
+
+        self.push_screen(RepositorySelectionScreen(repos), handle_selection)

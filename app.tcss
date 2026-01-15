@@ -363,3 +363,184 @@ SetupWizardScreen {
 .hidden {
     display: none;
 }
+
+/* Repository Selection Screen */
+#selection_dialog {
+    width: 70;
+    height: auto;
+    padding: 1 2;
+    background: $panel;
+    border: tall $primary;
+}
+
+#selection_title {
+    width: 100%;
+    content-align: center middle;
+    text-style: bold;
+    color: $primary;
+    padding: 0 0 1 0;
+}
+
+#selection_repo_list {
+    width: 100%;
+    height: 15;
+    border: solid $primary;
+    margin: 1 0;
+}
+
+#selection_help {
+    width: 100%;
+    content-align: center middle;
+    color: $accent;
+    padding: 1 0;
+}
+
+#no_repos {
+    width: 100%;
+    content-align: center middle;
+    color: $warning;
+    padding: 1 0;
+}
+
+#add_help {
+    width: 100%;
+    content-align: center middle;
+    color: $accent;
+}
+
+#selection_button_container {
+    width: 100%;
+    height: auto;
+    padding: 1 0 0 0;
+    align-horizontal: center;
+}
+
+#selection_button_container > Button {
+    margin: 0 1;
+}
+
+/* Add Repository Screen */
+#add_repo_dialog {
+    width: 70;
+    height: auto;
+    padding: 1 2;
+    background: $panel;
+    border: tall $primary;
+}
+
+#add_repo_title {
+    width: 100%;
+    content-align: center middle;
+    text-style: bold;
+    color: $primary;
+    padding: 0 0 1 0;
+}
+
+#add_repo_message {
+    width: 100%;
+    padding: 0 0 1 0;
+}
+
+#add_detected_label {
+    width: 100%;
+    padding: 0 0 1 0;
+}
+
+#add_repo_list {
+    width: 100%;
+    height: 15;
+    border: solid $primary;
+    margin: 1 0;
+}
+
+#add_repo_hint {
+    width: 100%;
+    content-align: center middle;
+    color: $accent;
+    padding: 1 0;
+}
+
+#add_no_repos_label {
+    width: 100%;
+    content-align: center middle;
+    color: $warning;
+    padding: 1 0;
+}
+
+#add_custom_hint {
+    width: 100%;
+    content-align: center middle;
+    color: $accent;
+}
+
+#add_custom_label {
+    width: 100%;
+    padding: 1 0 0 0;
+}
+
+#add_custom_input {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+
+#add_repo_button_container {
+    width: 100%;
+    height: auto;
+    padding: 1 0 0 0;
+    align-horizontal: center;
+}
+
+#add_repo_button_container > Button {
+    margin: 0 1;
+}
+
+/* Delete Repository Confirmation Screen */
+#delete_repo_dialog {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    background: $panel;
+    border: tall $error;
+}
+
+#delete_repo_title {
+    width: 100%;
+    content-align: center middle;
+    text-style: bold;
+    color: $error;
+    padding: 0 0 1 0;
+}
+
+#delete_repo_message {
+    width: 100%;
+    padding: 0 0 1 0;
+}
+
+#delete_repo_name {
+    width: 100%;
+    text-style: bold;
+    padding: 0 0 0 0;
+}
+
+#delete_repo_path {
+    width: 100%;
+    color: $accent;
+    padding: 0 0 1 0;
+}
+
+#delete_repo_warning1, #delete_repo_warning2 {
+    width: 100%;
+    color: $warning;
+    text-style: italic;
+}
+
+#delete_repo_button_container {
+    width: 100%;
+    height: auto;
+    padding: 1 0 0 0;
+    align-horizontal: center;
+}
+
+#delete_repo_button_container > Button {
+    margin: 0 1;
+}
