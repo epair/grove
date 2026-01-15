@@ -1,10 +1,12 @@
 """Entry point for Grove application."""
 
+import argparse
 import sys
 from pathlib import Path
 from textual.app import App, ComposeResult
 
 from .app import GroveApp
+from .clone import clone_repository
 from .config import (
     config_exists,
     detect_potential_repositories,
@@ -100,7 +102,34 @@ def select_repository_smart() -> Path | None:
 
 
 def main() -> None:
-    """Main entry point with repository selection loop."""
+    """Main entry point with CLI argument parsing and repository selection loop."""
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        prog="grove", description="Git Worktree and Tmux Session Manager"
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Clone subcommand
+    clone_parser = subparsers.add_parser(
+        "clone", help="Clone a repository and set up Grove structure"
+    )
+    clone_parser.add_argument("url", help="Git repository URL to clone")
+    clone_parser.add_argument(
+        "name",
+        nargs="?",
+        default=None,
+        help="Target directory name (default: repository name from URL)",
+    )
+
+    args = parser.parse_args()
+
+    # Handle clone command
+    if args.command == "clone":
+        exit_code = clone_repository(args.url, args.name)
+        sys.exit(exit_code)
+
+    # TUI launch logic
     while True:
         # Check if config exists
         if not config_exists():

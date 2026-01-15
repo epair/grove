@@ -1,6 +1,7 @@
 """Grove - Git Worktree and Tmux Session Manager."""
 
 from .app import GroveApp
+from .clone import clone_repository
 from .widgets import Sidebar, GitStatusDisplay, MetadataDisplay
 from .screens import (
     WorktreeFormScreen,
@@ -35,6 +36,7 @@ from .config import (
 
 __all__ = [
     "GroveApp",
+    "clone_repository",
     "Sidebar",
     "GitStatusDisplay",
     "MetadataDisplay",
