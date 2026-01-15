@@ -16,6 +16,7 @@ from .config import (
     find_repo_for_directory,
     set_active_repo,
     update_last_used,
+    get_config_path,
     ConfigError,
 )
 from .screens import SetupWizardScreen, RepositorySelectionScreen
@@ -131,9 +132,9 @@ def main() -> None:
 
     # TUI launch logic
     while True:
-        # Check if config exists
-        if not config_exists():
-            # First-time setup: show wizard
+        # Check if config exists or has no repositories
+        if not config_exists() or not get_repositories():
+            # First-time setup or no repositories: show wizard
             detected = detect_potential_repositories()
             setup_app = SetupApp(detected)
             setup_app.run()
@@ -155,6 +156,10 @@ def main() -> None:
             repo_path = select_repository_smart()
         except ConfigError as e:
             print(f"Configuration error: {e}", file=sys.stderr)
+            print(f"\nTo fix this:", file=sys.stderr)
+            print(f"  1. Check your config file: {get_config_path()}", file=sys.stderr)
+            print(f"  2. Remove invalid repository entries or fix the paths", file=sys.stderr)
+            print(f"  3. Or delete the config file to run setup wizard again", file=sys.stderr)
             sys.exit(1)
 
         if repo_path is None:

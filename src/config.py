@@ -130,17 +130,17 @@ def get_repositories() -> list[Repository]:
     """Get list of all configured repositories.
 
     Returns:
-        List of Repository dicts with name and path
+        List of Repository dicts with name and path (empty list if no config exists)
 
     Raises:
-        ConfigError: If config is invalid
+        ConfigError: If config file exists but is invalid
     """
-    try:
-        config = load_config()
-    except ConfigError:
-        # If no config exists, return empty list
+    # If config file doesn't exist, return empty list to trigger setup wizard
+    if not config_exists():
         return []
 
+    # If config exists but has invalid data, let ConfigError propagate
+    config = load_config()
     return config.get("repositories", [])
 
 
@@ -353,7 +353,7 @@ def detect_potential_repositories() -> list[Path]:
     # Strategy 2: Check common project directories
     home = Path.home()
     search_dirs = [
-        home / "code" / "projects",
+        home / "code",
         home / "projects",
         home / "dev",
         home / "workspace",

@@ -143,7 +143,10 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
 
 def get_worktree_directories() -> list[str]:
     """Get directories at the same level as .bare directory, excluding hidden directories."""
-    bare_parent = get_repo_path()
+    try:
+        bare_parent = get_repo_path()
+    except ConfigError:
+        return []  # Return empty list if no active repo
 
     # Get all directories at the same level as .bare, excluding hidden ones
     directories: list[str] = []
@@ -165,10 +168,10 @@ def get_active_tmux_sessions() -> set[str]:
 
 def get_worktree_pr_status() -> set[str]:
     """Get names of worktrees that have a PR published."""
-    bare_parent = get_repo_path()
-
-    if bare_parent is None:
-        return set()
+    try:
+        bare_parent = get_repo_path()
+    except ConfigError:
+        return set()  # Return empty set if no active repo
 
     # Check each worktree for .env file with WORKTREE_PR_PUBLISHED=true
     pr_worktrees: set[str] = set()

@@ -117,8 +117,12 @@ class GroveApp(App):
         if detected_worktree is None:
             return
 
-        # Get the sidebar and list of worktrees
+        # Get the sidebar and ensure it's loaded with data
         sidebar = self.query_one("#sidebar", Sidebar)
+        # Sidebar might still be showing "Loading..." - ensure it's refreshed
+        sidebar.refresh_directories()
+
+        # Now get the list of worktrees
         worktrees = get_worktree_directories()
 
         # Find the index of the detected worktree
@@ -128,9 +132,12 @@ class GroveApp(App):
             # Worktree not in list (shouldn't happen, but defensive)
             return
 
-        # Set the sidebar index to select the worktree
-        # This will trigger on_list_view_highlighted which updates selected_worktree
-        sidebar.index = index
+        # Defer setting the index until after the sidebar has been fully refreshed
+        # This ensures the ListView has processed all the append operations
+        def set_index() -> None:
+            sidebar.index = index
+
+        self.call_after_refresh(set_index)
 
     def action_new_worktree(self) -> None:
         """An action to create a new worktree."""
@@ -328,20 +335,9 @@ class GroveApp(App):
                 success_msg += " deleted successfully"
                 self.notify(success_msg, severity="information")
 
-            # Refresh the sidebar by recreating it
+            # Refresh the sidebar
             sidebar = self.query_one("#sidebar", Sidebar)
-            sidebar.clear()
-            directories = get_worktree_directories()
-            active_sessions = get_active_tmux_sessions()
-            pr_worktrees = get_worktree_pr_status()
-
-            if directories:
-                for directory in directories:
-                    icon = "●" if directory in active_sessions else "○"
-                    pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
-                    sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
-            else:
-                sidebar.append(ListItem(Label("No directories found")))
+            sidebar.refresh_directories()
 
             # Clear selection if the deleted worktree was selected
             if self.selected_worktree == worktree_name:
@@ -607,18 +603,7 @@ class GroveApp(App):
         # Refresh the sidebar after cleanup
         if orphaned_worktrees:
             sidebar = self.query_one("#sidebar", Sidebar)
-            sidebar.clear()
-            directories = get_worktree_directories()
-            active_sessions = get_active_tmux_sessions()
-            pr_worktrees = get_worktree_pr_status()
-
-            if directories:
-                for directory in directories:
-                    icon = "●" if directory in active_sessions else "○"
-                    pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
-                    sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
-            else:
-                sidebar.append(ListItem(Label("No directories found")))
+            sidebar.refresh_directories()
 
     def action_switch_repository(self) -> None:
         """Show repository selection screen and restart with selected repo."""

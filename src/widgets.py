@@ -10,6 +10,7 @@ from textual.containers import VerticalScroll, Horizontal
 from rich.text import Text
 from rich.console import RenderableType
 
+from .config import ConfigError
 from .utils import get_worktree_directories, get_active_tmux_sessions, get_worktree_pr_status
 from .utils import get_worktree_metadata, get_worktree_git_info, get_worktree_git_status
 from .utils import get_tmux_pane_preview, get_worktree_git_log
@@ -22,17 +23,36 @@ class Sidebar(ListView):
     ]
 
     def compose(self) -> ComposeResult:
-        directories = get_worktree_directories()
-        sessions = get_active_tmux_sessions()
-        pr_worktrees = get_worktree_pr_status()
+        """Compose initial empty structure - data loaded on mount."""
+        yield ListItem(Label("Loading..."))
 
-        if directories:
-            for directory in directories:
-                icon = "●" if directory in sessions else "○"
-                pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
-                yield ListItem(Label(f"{icon}{pr_indicator} {directory}"))
-        else:
-            yield ListItem(Label("No directories found"))
+    def on_mount(self) -> None:
+        """Load worktree data when widget is mounted."""
+        self.refresh_directories()
+
+    def refresh_directories(self) -> None:
+        """Refresh the sidebar with current worktree directories."""
+        try:
+            directories = get_worktree_directories()
+            sessions = get_active_tmux_sessions()
+            pr_worktrees = get_worktree_pr_status()
+
+            # Clear existing items
+            self.clear()
+
+            # Populate with data
+            if directories:
+                for directory in directories:
+                    icon = "●" if directory in sessions else "○"
+                    pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
+                    self.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
+            else:
+                self.append(ListItem(Label("No directories found")))
+        except ConfigError as e:
+            # Handle gracefully if repository is not configured
+            self.clear()
+            self.append(ListItem(Label(f"[bold red]Error:[/bold red] {str(e)}")))
+            self.append(ListItem(Label("[dim]Check your Grove configuration[/dim]")))
 
 
 class ScrollableContainer(VerticalScroll):
