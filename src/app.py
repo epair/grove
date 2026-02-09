@@ -3,6 +3,7 @@
 import subprocess
 import time
 from pathlib import Path
+from typing import Any
 
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, ListView, ListItem, Label
@@ -159,56 +160,68 @@ class GroveApp(App):
 
         self.push_screen(PRFormScreen(), self.handle_pr_submission)
 
-    def action_edit_metadata(self) -> None:
-        """An action to edit pr.md metadata file in neovim."""
-        if not self.selected_worktree:
-            self.notify("No worktree selected", severity="warning")
-            return
+    def _ensure_metadata_file(self, worktree_name: str) -> Path:
+        """Create metadata directory and pr.md file if they don't exist.
 
-        # Get worktree root directory
+        Returns:
+            Path to the pr.md metadata file.
+        """
         worktree_root = get_repo_path()
-
-        # Construct metadata file path
-        metadata_dir = worktree_root / ".grove" / "metadata" / self.selected_worktree
+        metadata_dir = worktree_root / ".grove" / "metadata" / worktree_name
         metadata_file = metadata_dir / "pr.md"
 
-        # Ensure metadata directory exists
         metadata_dir.mkdir(parents=True, exist_ok=True)
 
-        # Ensure metadata file exists (create with template if needed)
         if not metadata_file.exists():
             metadata_file.write_text("# Pull Request\n\nWhat are you building?\n\n")
 
-        # Get tmux server
+        return metadata_file
+
+    def _get_or_create_tmux_session(self, session_name: str, worktree_path: Path) -> Any:
+        """Get an existing tmux session or create a new one.
+
+        Returns:
+            The tmux session object, or None if creation failed.
+        """
         server = get_tmux_server()
         if server is None:
             self.notify("Could not connect to tmux server", severity="error")
-            return
-
-        # Get or create session
-        session_name = self.selected_worktree.replace('.', '-')
-        worktree_path = worktree_root / self.selected_worktree
+            return None
 
         if not session_exists(server, session_name):
-            # Create session
             try:
-                session = server.new_session(
+                return server.new_session(
                     session_name=session_name,
                     start_directory=str(worktree_path),
                     attach=False
                 )
             except Exception as e:
                 self.notify(f"Failed to create tmux session: {str(e)}", severity="error")
-                return
+                return None
         else:
-            # Get existing session
             sessions = server.sessions.filter(session_name=session_name)
             if not sessions:
                 self.notify(f"Session '{session_name}' not found", severity="error")
-                return
-            session = sessions[0]
+                return None
+            return sessions[0]
 
-        # Create new window in session
+    def action_edit_metadata(self) -> None:
+        """An action to edit pr.md metadata file in neovim."""
+        if not self.selected_worktree:
+            self.notify("No worktree selected", severity="warning")
+            return
+
+        worktree_root = get_repo_path()
+        metadata_file = self._ensure_metadata_file(self.selected_worktree)
+
+        session_name = self.selected_worktree.replace('.', '-')
+        worktree_path = worktree_root / self.selected_worktree
+
+        session = self._get_or_create_tmux_session(session_name, worktree_path)
+        if session is None:
+            return
+
+        # Create new window in session and open neovim
         try:
             new_window = session.new_window(
                 window_name="edit-pr",
@@ -269,6 +282,23 @@ class GroveApp(App):
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
+    def _kill_tmux_session(self, session_name: str) -> bool:
+        """Kill a tmux session if it exists.
+
+        Returns:
+            True if the session was killed, False if session doesn't exist.
+
+        Raises:
+            Exception: If the session exists but killing it fails.
+        """
+        server = get_tmux_server()
+        if server and session_exists(server, session_name):
+            found_sessions = server.sessions.filter(session_name=session_name)
+            if found_sessions:
+                found_sessions[0].kill_session()
+                return True
+        return False
+
     def handle_worktree_deletion(self, confirmed: bool | None) -> None:
         """Handle the result from the worktree deletion confirmation."""
         if confirmed is None or not confirmed:
@@ -286,44 +316,22 @@ class GroveApp(App):
                 self.notify(f"Failed to delete worktree: {error_msg}", severity="error")
                 return
 
-            # Check if there's a warning message (branch deletion, Docker cleanup, etc.)
             has_warning = bool(error_msg)
 
-            # Check if there's a tmux session with the same name and kill it
+            # Try to kill the associated tmux session
             tmux_killed = False
             try:
-                server = get_tmux_server()
-                if server and session_exists(server, worktree_name):
-                    # Session exists, kill it
-                    try:
-                        found_sessions = server.sessions.filter(session_name=worktree_name)
-                        if found_sessions:
-                            found_sessions[0].kill_session()
-                            tmux_killed = True
-                    except Exception:
-                        if has_warning:
-                            self.notify(f"{error_msg} Worktree deleted but failed to kill tmux session", severity="warning")
-                        else:
-                            self.notify('Worktree deleted but failed to kill tmux session', severity="warning")
-                        # Refresh sidebar and return early
-                        sidebar = self.query_one("#sidebar", Sidebar)
-                        sidebar.clear()
-                        directories = get_worktree_directories()
-                        active_sessions = get_active_tmux_sessions()
-                        pr_worktrees = get_worktree_pr_status()
-                        if directories:
-                            for directory in directories:
-                                icon = "●" if directory in active_sessions else "○"
-                                pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
-                                sidebar.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
-                        else:
-                            sidebar.append(ListItem(Label("No directories found")))
-                        if self.selected_worktree == worktree_name:
-                            self.selected_worktree = ""
-                        return
+                tmux_killed = self._kill_tmux_session(worktree_name)
             except Exception:
-                # tmux not available or other error
-                pass
+                if has_warning:
+                    self.notify(f"{error_msg} Worktree deleted but failed to kill tmux session", severity="warning")
+                else:
+                    self.notify('Worktree deleted but failed to kill tmux session', severity="warning")
+                sidebar = self.query_one("#sidebar", Sidebar)
+                sidebar.refresh_directories()
+                if self.selected_worktree == worktree_name:
+                    self.selected_worktree = ""
+                return
 
             # Build success message
             if has_warning:
@@ -346,6 +354,122 @@ class GroveApp(App):
         except Exception as e:
             self.notify(f"Unexpected error: {str(e)}", severity="error")
 
+    def _get_worktree_branch(self, worktree_path: Path) -> str | None:
+        """Get the current branch name for a worktree.
+
+        Returns:
+            The branch name, or None if it couldn't be determined.
+        """
+        branch_result = subprocess.run(
+            ['git', '-C', str(worktree_path), 'branch', '--show-current'],
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if branch_result.returncode != 0:
+            self.notify("Failed to get current branch name", severity="error")
+            return None
+
+        branch_name = branch_result.stdout.strip()
+        if not branch_name:
+            self.notify("No current branch found", severity="error")
+            return None
+
+        return branch_name
+
+    def _push_branch(self, worktree_path: Path, branch_name: str) -> bool:
+        """Push a branch to origin.
+
+        Returns:
+            True if the push succeeded, False otherwise.
+        """
+        push_result = subprocess.run(
+            ['git', '-C', str(worktree_path), 'push', '-u', 'origin', branch_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if push_result.returncode != 0:
+            self.notify(f"Failed to push branch: {push_result.stderr}", severity="error")
+            return False
+
+        return True
+
+    def _create_github_pr(self, worktree_path: Path, pr_title: str,
+                          reviewers: list[str], body_file: Path | None) -> str | None:
+        """Create a GitHub PR using the gh CLI.
+
+        Returns:
+            The PR URL if created successfully, None on failure.
+        """
+        gh_command: list[str] = ['gh', 'pr', 'create', '--title', pr_title]
+
+        if body_file and body_file.exists():
+            gh_command.extend(['--body-file', str(body_file)])
+        else:
+            gh_command.extend(['--body', ''])
+
+        if reviewers:
+            gh_command.extend(['--reviewer', ','.join(reviewers)])
+
+        pr_result = subprocess.run(
+            gh_command,
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if pr_result.returncode != 0:
+            self.notify(f"Failed to create PR: {pr_result.stderr}", severity="error")
+            return None
+
+        # Extract PR URL from output
+        pr_output = pr_result.stdout.strip()
+        if pr_output:
+            for line in reversed(pr_output.split('\n')):
+                if 'github.com' in line and '/pull/' in line:
+                    return line.strip()
+
+        return ""
+
+    def _update_pr_env_file(self, worktree_path: Path) -> None:
+        """Write WORKTREE_PR_PUBLISHED=true to .env file in worktree directory."""
+        env_file_path = worktree_path / ".env"
+        try:
+            if env_file_path.exists():
+                existing_content = env_file_path.read_text()
+                lines = existing_content.strip().split('\n')
+                updated = False
+                for i, line in enumerate(lines):
+                    if line.startswith('WORKTREE_PR_PUBLISHED='):
+                        lines[i] = 'WORKTREE_PR_PUBLISHED=true'
+                        updated = True
+                        break
+
+                if not updated:
+                    lines.append('WORKTREE_PR_PUBLISHED=true')
+
+                new_content = '\n'.join(lines) + '\n'
+            else:
+                new_content = 'WORKTREE_PR_PUBLISHED=true\n'
+
+            env_file_path.write_text(new_content)
+        except Exception as e:
+            self.notify(f"Warning: Could not write to .env file: {str(e)}", severity="warning")
+
+    def _open_pr_url(self, pr_url: str) -> None:
+        """Open a PR URL in the browser and notify the user."""
+        if pr_url:
+            try:
+                subprocess.run(['open', pr_url], check=False)
+            except Exception:
+                self.notify(f"PR created: {pr_url}", severity="information")
+        else:
+            self.notify("Pull request created successfully", severity="information")
+
     def handle_pr_submission(self, form_data: dict[str, str | list[str]] | None) -> None:
         """Handle the result from the PR submission form."""
         if form_data is None:
@@ -359,123 +483,27 @@ class GroveApp(App):
             self.notify("No worktree selected", severity="error")
             return
 
-        # Find the worktree root directory
-        current_path = Path.cwd()
         worktree_root = get_repo_path()
-
         worktree_path = worktree_root / self.selected_worktree
         if not worktree_path.exists():
             self.notify(f"Worktree directory not found: {self.selected_worktree}", severity="error")
             return
 
         try:
-            # Get the current branch name
-            branch_result = subprocess.run(
-                ['git', '-C', str(worktree_path), 'branch', '--show-current'],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-
-            if branch_result.returncode != 0:
-                self.notify("Failed to get current branch name", severity="error")
-                return
-
-            branch_name = branch_result.stdout.strip()
+            branch_name = self._get_worktree_branch(worktree_path)
             if not branch_name:
-                self.notify("No current branch found", severity="error")
                 return
 
-            # Push the branch to origin
-            push_result = subprocess.run(
-                ['git', '-C', str(worktree_path), 'push', '-u', 'origin', branch_name],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if push_result.returncode != 0:
-                self.notify(f"Failed to push branch: {push_result.stderr}", severity="error")
+            if not self._push_branch(worktree_path, branch_name):
                 return
 
-            # Prepare the gh pr create command
             pr_body_file = worktree_root / ".grove" / "metadata" / self.selected_worktree / "pr.md"
-
-            gh_command: list[str] = ['gh', 'pr', 'create', '--title', pr_title]
-
-            # Add body file if it exists
-            if pr_body_file.exists():
-                gh_command.extend(['--body-file', str(pr_body_file)])
-            else:
-                gh_command.extend(['--body', ''])
-
-            # Add reviewers if any selected
-            if reviewers:
-                gh_command.extend(['--reviewer', ','.join(reviewers)])
-
-            # Run gh pr create from the worktree directory
-            pr_result = subprocess.run(
-                gh_command,
-                cwd=str(worktree_path),
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if pr_result.returncode != 0:
-                self.notify(f"Failed to create PR: {pr_result.stderr}", severity="error")
+            pr_url = self._create_github_pr(worktree_path, pr_title, reviewers, pr_body_file)
+            if pr_url is None:
                 return
 
-            # Extract PR URL from output (usually the last line)
-            pr_output = pr_result.stdout.strip()
-            pr_url = None
-
-            # gh pr create outputs the URL on the last line
-            if pr_output:
-                lines = pr_output.split('\n')
-                for line in reversed(lines):
-                    if 'github.com' in line and '/pull/' in line:
-                        pr_url = line.strip()
-                        break
-
-            # Write WORKTREE_PR_PUBLISHED=true to .env file in worktree dir
-            env_file_path = worktree_path / ".env"
-            try:
-                # Read existing .env content if it exists
-                existing_content = ""
-                if env_file_path.exists():
-                    existing_content = env_file_path.read_text()
-                    # Check if WORKTREE_PR_PUBLISHED already exists
-                    lines = existing_content.strip().split('\n')
-                    updated = False
-                    for i, line in enumerate(lines):
-                        if line.startswith('WORKTREE_PR_PUBLISHED='):
-                            lines[i] = 'WORKTREE_PR_PUBLISHED=true'
-                            updated = True
-                            break
-
-                    if not updated:
-                        lines.append('WORKTREE_PR_PUBLISHED=true')
-
-                    new_content = '\n'.join(lines) + '\n'
-                else:
-                    new_content = 'WORKTREE_PR_PUBLISHED=true\n'
-
-                env_file_path.write_text(new_content)
-            except Exception as e:
-                self.notify(f"Warning: Could not write to .env file: {str(e)}", severity="warning")
-
-            # Open the PR URL if found
-            if pr_url:
-                try:
-                    # Use the open command on macOS
-                    subprocess.run(['open', pr_url], check=False)
-                except Exception:
-                    self.notify(f"PR created: {pr_url}", severity="information")
-            else:
-                self.notify("Pull request created successfully", severity="information")
-
-            # Exit the app
+            self._update_pr_env_file(worktree_path)
+            self._open_pr_url(pr_url)
             self.exit()
 
         except subprocess.TimeoutExpired:
@@ -489,27 +517,12 @@ class GroveApp(App):
         """Handle when a worktree is highlighted in the sidebar."""
         if message.item and message.item.query(Label):
             label = message.item.query_one(Label)
-            # Extract worktree name from label text (remove icon and PR indicator)
-            # Format is: "{icon}{pr_indicator} {directory}"
-            # where icon is "●" or "○" and pr_indicator is " [bold]PR[/bold]" or ""
-            # In Textual 6.0+, Label stores its text in the content property
-            # The content can be various types, so we need to convert it to string
             label_text = str(label.content)
 
-            # Remove the icon (first character) and any PR indicator
             if " " in label_text:
-                # Find the last space, everything after it is the worktree name
-                parts = label_text.split()
-                # The worktree name is always the last part after all prefixes
-                worktree_name = parts[-1] if parts else ""
-                # Handle case where worktree name might have spaces (need to get everything after prefixes)
-                # Look for the pattern: icon, optional PR indicator, then the actual name
                 if "[bold]PR[/bold]" in label_text:
-                    # If there's a PR indicator, split after it
-                    after_pr = label_text.split("[/bold]")[-1].strip()
-                    worktree_name = after_pr
+                    worktree_name = label_text.split("[/bold]")[-1].strip()
                 else:
-                    # No PR indicator, just split after the icon
                     worktree_name = label_text.split(" ", 1)[1] if " " in label_text else ""
 
                 self.selected_worktree = worktree_name
@@ -580,15 +593,7 @@ class GroveApp(App):
                 success, error_msg = remove_worktree_with_branch(worktree_name)
 
                 if success:
-                    # Check if there's a tmux session with the same name and kill it
-                    try:
-                        server = get_tmux_server()
-                        if server and session_exists(server, worktree_name):
-                            found_sessions = server.sessions.filter(session_name=worktree_name)
-                            if found_sessions:
-                                found_sessions[0].kill_session()
-                    except Exception:
-                        pass
+                    self._kill_tmux_session(worktree_name)
 
                     if error_msg:
                         self.notify(f"Auto-cleaned worktree {worktree_name}: {error_msg}", severity="warning")
