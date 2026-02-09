@@ -22,11 +22,29 @@ class Repository(TypedDict):
 class ConfigError(Exception):
     """Raised when config file is invalid or missing required fields."""
 
-    pass
-
 
 # Global state for active repository
 _active_repo_path: Path | None = None
+
+
+def _validate_repo_path(path: Path) -> Path:
+    """Validate and resolve a repository path.
+
+    Args:
+        path: Path to validate
+
+    Returns:
+        Resolved path to repository
+
+    Raises:
+        ConfigError: If path does not exist or lacks .bare directory
+    """
+    resolved = path.expanduser().resolve()
+    if not resolved.exists():
+        raise ConfigError(f"Repository path does not exist: {path}")
+    if not (resolved / ".bare").is_dir():
+        raise ConfigError(f"Repository path does not contain .bare directory: {path}")
+    return resolved
 
 
 def get_config_path() -> Path:
@@ -89,13 +107,7 @@ def load_config() -> dict:
     for repo in config_data["repositories"]:
         if "path" not in repo:
             raise ConfigError(f"Repository missing 'path' field: {repo}")
-
-        repo_path_obj = Path(repo["path"]).expanduser()
-        if not repo_path_obj.exists():
-            raise ConfigError(f"Repository path does not exist: {repo['path']}")
-
-        if not (repo_path_obj / ".bare").is_dir():
-            raise ConfigError(f"Repository path does not contain .bare directory: {repo['path']}")
+        _validate_repo_path(Path(repo["path"]))
 
     return config_data
 
@@ -203,9 +215,9 @@ def remove_repository(path: str) -> None:
     config_data["repositories"] = [r for r in config_data["repositories"] if r["path"] != repo_path_str]
 
     # If removed repo was last_used, remove the field (TOML doesn't support None)
-    if config_data.get("grove", {}).get("last_used") == repo_path_str:
-        if "last_used" in config_data.get("grove", {}):
-            del config_data["grove"]["last_used"]
+    grove_section = config_data.get("grove", {})
+    if grove_section.get("last_used") == repo_path_str:
+        del grove_section["last_used"]
 
     _write_config(config_data)
 
@@ -236,16 +248,7 @@ def set_active_repo(path: Path) -> None:
         ConfigError: If path is invalid
     """
     global _active_repo_path
-
-    # Validate path
-    repo_path_obj = path.expanduser().resolve()
-    if not repo_path_obj.exists():
-        raise ConfigError(f"Repository path does not exist: {path}")
-
-    if not (repo_path_obj / ".bare").is_dir():
-        raise ConfigError(f"Repository path does not contain .bare directory: {path}")
-
-    _active_repo_path = repo_path_obj
+    _active_repo_path = _validate_repo_path(path)
 
 
 def get_active_repo() -> Path:
