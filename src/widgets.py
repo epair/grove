@@ -11,9 +11,16 @@ from rich.text import Text
 from rich.console import RenderableType
 
 from .config import ConfigError
-from .utils import get_worktree_directories, get_active_tmux_sessions, get_worktree_pr_status
-from .utils import get_worktree_metadata, get_worktree_git_info, get_worktree_git_status
-from .utils import get_tmux_pane_preview, get_worktree_git_log
+from .utils import (
+    get_worktree_directories,
+    get_active_tmux_sessions,
+    get_worktree_pr_status,
+    get_worktree_metadata,
+    get_worktree_git_info,
+    get_worktree_git_status,
+    get_tmux_pane_preview,
+    get_worktree_git_log,
+)
 
 
 class Sidebar(ListView):
@@ -37,10 +44,8 @@ class Sidebar(ListView):
             sessions = get_active_tmux_sessions()
             pr_worktrees = get_worktree_pr_status()
 
-            # Clear existing items
             self.clear()
 
-            # Populate with data
             if directories:
                 for directory in directories:
                     icon = "●" if directory in sessions else "○"
@@ -49,7 +54,6 @@ class Sidebar(ListView):
             else:
                 self.append(ListItem(Label("No directories found")))
         except ConfigError as e:
-            # Handle gracefully if repository is not configured
             self.clear()
             self.append(ListItem(Label(f"[bold red]Error:[/bold red] {str(e)}")))
             self.append(ListItem(Label("[dim]Check your Grove configuration[/dim]")))
@@ -79,60 +83,56 @@ class GitStatusDisplay(Widget):
 
     worktree_name: reactive[str] = reactive("")
 
+    # Section definitions: (status_key, header, icon, color)
+    _SECTIONS: list[tuple[str, str, str, str]] = [
+        ("unstaged", "Unstaged Changes", "● ", "red"),
+        ("staged", "Staged Changes", "✓ ", "green"),
+        ("untracked", "Untracked Files", "? ", "yellow"),
+    ]
+
     def update_content(self, worktree_name: str) -> None:
         """Update the display with git status for the given worktree."""
         self.worktree_name = worktree_name
-        self.refresh(layout=True)  # Force layout recalculation for proper height adjustment
+        self.refresh(layout=True)
+
+    def _render_file_section(self, files: list[str], header: str, icon: str, color: str) -> list[Text]:
+        """Render a section of files (staged, unstaged, or untracked) with consistent styling."""
+        lines: list[Text] = []
+        lines.append(Text(header, style=f"bold {color}"))
+        for file in files:
+            file_line = Text()
+            file_line.append(icon, style=f"bold {color}")
+            file_line.append(file, style=color)
+            lines.append(file_line)
+        return lines
 
     def render(self) -> RenderableType:
         """Render git status with Rich Text styling."""
         if not self.worktree_name:
             return Text("Select a worktree to view git status", style="dim italic")
 
-        # Get git status
         status = get_worktree_git_status(self.worktree_name)
 
-        # Build the output with Rich Text
-        lines: list[Text] = []
-
-        # Check if working tree is clean
         if not status["staged"] and not status["unstaged"] and not status["untracked"]:
-            lines.append(Text("Working tree clean", style="dim italic"))
-            return Text("\n").join(lines)
+            return Text("Working tree clean", style="dim italic")
 
-        # Add unstaged files (show first, like lazygit)
-        if status["unstaged"]:
-            lines.append(Text("Unstaged Changes", style="bold red"))
-            for file in status["unstaged"]:
-                # Use red for unstaged files with a dot icon
-                file_line = Text()
-                file_line.append("● ", style="bold red")
-                file_line.append(file, style="red")
-                lines.append(file_line)
-            lines.append(Text())  # Empty line
-
-        # Add staged files
-        if status["staged"]:
-            lines.append(Text("Staged Changes", style="bold green"))
-            for file in status["staged"]:
-                # Use green for staged files with a checkmark icon
-                file_line = Text()
-                file_line.append("✓ ", style="bold green")
-                file_line.append(file, style="green")
-                lines.append(file_line)
-            lines.append(Text())  # Empty line
-
-        # Add untracked files
-        if status["untracked"]:
-            lines.append(Text("Untracked Files", style="bold yellow"))
-            for file in status["untracked"]:
-                # Use yellow/dim for untracked files with a question mark icon
-                file_line = Text()
-                file_line.append("? ", style="bold yellow")
-                file_line.append(file, style="yellow")
-                lines.append(file_line)
+        lines: list[Text] = []
+        for key, header, icon, color in self._SECTIONS:
+            if status[key]:
+                if lines:
+                    lines.append(Text())  # Separator between sections
+                lines.extend(self._render_file_section(status[key], header, icon, color))
 
         return Text("\n").join(lines)
+
+
+# Sync status display configuration: (icon, label_template, color)
+_SYNC_STATUS_CONFIG: dict[str, tuple[str, str, str]] = {
+    "up-to-date": ("✓ ", "Up to date", "green"),
+    "ahead": ("↑ ", "Ahead {ahead} commit{s}", "yellow"),
+    "behind": ("↓ ", "Behind {behind} commit{s}", "red"),
+    "diverged": ("⚠ ", "Diverged (↑{ahead} ↓{behind})", "magenta"),
+}
 
 
 class GitLogDisplay(Widget):
@@ -143,96 +143,75 @@ class GitLogDisplay(Widget):
     def update_content(self, worktree_name: str) -> None:
         """Update the display with git log for the given worktree."""
         self.worktree_name = worktree_name
-        self.refresh(layout=True)  # Force layout recalculation for proper height adjustment
+        self.refresh(layout=True)
+
+    def _render_sync_status(self, log_data: dict[str, Any]) -> Text:
+        """Render the sync status line from log data."""
+        sync_status = log_data["sync_status"]
+        comparison_branch = log_data.get("comparison_branch", "")
+
+        if sync_status == "no-upstream":
+            line = Text()
+            line.append("• ", style="dim")
+            line.append("No comparison branch available", style="dim italic")
+            return line
+
+        config = _SYNC_STATUS_CONFIG.get(sync_status)
+        if not config:
+            return Text()
+
+        icon, label_template, color = config
+        ahead = log_data["ahead_count"]
+        behind = log_data["behind_count"]
+
+        label = label_template.format(
+            ahead=ahead,
+            behind=behind,
+            s="s" if (ahead > 1 if "ahead" in label_template.lower() else behind > 1) else "",
+        )
+
+        line = Text()
+        line.append(icon, style=f"bold {color}")
+        line.append(label, style=color)
+        if comparison_branch:
+            line.append(f" ({comparison_branch})", style=f"dim {color}")
+        return line
+
+    def _render_commit(self, commit: dict[str, Any]) -> list[Text]:
+        """Render a single commit entry (hash + message line, then author + date line)."""
+        if not commit["is_pushed"]:
+            hash_style, message_style = "bold yellow", "bold white"
+            author_style, date_style = "cyan", "green"
+        else:
+            hash_style, message_style = "dim cyan", "dim white"
+            author_style, date_style = "dim", "dim"
+
+        commit_line = Text()
+        commit_line.append(f"{commit['hash']} ", style=hash_style)
+        commit_line.append(f"{commit['message']}", style=message_style)
+
+        info_line = Text()
+        info_line.append("  ", style="")
+        info_line.append(f"{commit['author']}", style=author_style)
+        info_line.append(" • ", style="dim")
+        info_line.append(f"{commit['date']}", style=date_style)
+
+        return [commit_line, info_line]
 
     def render(self) -> RenderableType:
         """Render git log with Rich Text styling."""
         if not self.worktree_name:
             return Text("Select a worktree to view git log", style="dim italic")
 
-        # Get git log data
         log_data = get_worktree_git_log(self.worktree_name)
+        lines: list[Text] = [self._render_sync_status(log_data), Text()]
 
-        # Build the output with Rich Text
-        lines: list[Text] = []
-
-        # Show sync status at the top
-        sync_status = log_data["sync_status"]
-        ahead_count = log_data["ahead_count"]
-        behind_count = log_data["behind_count"]
-        comparison_branch = log_data.get("comparison_branch", "")
-
-        if sync_status == "up-to-date":
-            status_line = Text()
-            status_line.append("✓ ", style="bold green")
-            status_line.append("Up to date", style="green")
-            if comparison_branch:
-                status_line.append(f" ({comparison_branch})", style="dim green")
-            lines.append(status_line)
-        elif sync_status == "ahead":
-            status_line = Text()
-            status_line.append("↑ ", style="bold yellow")
-            status_line.append(f"Ahead {ahead_count} commit{'s' if ahead_count > 1 else ''}", style="yellow")
-            if comparison_branch:
-                status_line.append(f" ({comparison_branch})", style="dim yellow")
-            lines.append(status_line)
-        elif sync_status == "behind":
-            status_line = Text()
-            status_line.append("↓ ", style="bold red")
-            status_line.append(f"Behind {behind_count} commit{'s' if behind_count > 1 else ''}", style="red")
-            if comparison_branch:
-                status_line.append(f" ({comparison_branch})", style="dim red")
-            lines.append(status_line)
-        elif sync_status == "diverged":
-            status_line = Text()
-            status_line.append("⚠ ", style="bold magenta")
-            status_line.append(f"Diverged (↑{ahead_count} ↓{behind_count})", style="magenta")
-            if comparison_branch:
-                status_line.append(f" ({comparison_branch})", style="dim magenta")
-            lines.append(status_line)
-        elif sync_status == "no-upstream":
-            status_line = Text()
-            status_line.append("• ", style="dim")
-            status_line.append("No comparison branch available", style="dim italic")
-            lines.append(status_line)
-
-        lines.append(Text())  # Empty line
-
-        # Show commits
         commits = log_data["commits"]
-
         if not commits:
             lines.append(Text("No commits", style="dim italic"))
         else:
             for commit in commits:
-                # Determine style based on whether commit is already in upstream/main
-                # is_pushed means: already in upstream branch OR already in main branch
-                if not commit["is_pushed"]:
-                    # New commits (not in upstream or main) - bright/yellow style
-                    hash_style = "bold yellow"
-                    message_style = "bold white"
-                    author_style = "cyan"
-                    date_style = "green"
-                else:
-                    # Existing commits (in upstream or main) - dim/gray style like in lazygit
-                    hash_style = "dim cyan"
-                    message_style = "dim white"
-                    author_style = "dim"
-                    date_style = "dim"
-
-                # Build commit line: hash message (author, date)
-                commit_line = Text()
-                commit_line.append(f"{commit['hash']} ", style=hash_style)
-                commit_line.append(f"{commit['message']}", style=message_style)
-                lines.append(commit_line)
-
-                # Add author and date on next line with indent
-                info_line = Text()
-                info_line.append("  ", style="")
-                info_line.append(f"{commit['author']}", style=author_style)
-                info_line.append(" • ", style="dim")
-                info_line.append(f"{commit['date']}", style=date_style)
-                lines.append(info_line)
+                lines.extend(self._render_commit(commit))
 
         return Text("\n").join(lines)
 
@@ -240,45 +219,26 @@ class GitLogDisplay(Widget):
 class MetadataTopDisplay(Markdown):
     """Widget to display description and PR info metadata."""
 
+    @staticmethod
+    def _format_section(heading: str, content: str | None, fallback: str) -> list[str]:
+        """Format a markdown section with heading and content or fallback text."""
+        return [f"## {heading}", content if content else f"*{fallback}*", ""]
+
     def update_content(self, worktree_name: str) -> None:
         """Update the display with metadata for the given worktree."""
         if not worktree_name:
             self.update("*Select a worktree to view metadata*")
             return
 
-        # Get metadata
         metadata = get_worktree_metadata(worktree_name)
 
-        # Format the content
-        content_parts = []
-
-        # Add description if available
-        if metadata.get("description"):
-            content_parts.extend([
-                "## Description",
-                metadata["description"],
-                "",
-            ])
-        else:
-            content_parts.extend([
-                "## Description",
-                "*No description available*",
-                "",
-            ])
-
-        # Add PR info if available
-        if metadata.get("pr"):
-            content_parts.extend([
-                "## Pull Request Info",
-                metadata["pr"],
-                "",
-            ])
-        else:
-            content_parts.extend([
-                "## Pull Request Info",
-                "*No PR information available*",
-                "",
-            ])
+        content_parts: list[str] = []
+        content_parts.extend(self._format_section(
+            "Description", metadata.get("description"), "No description available"
+        ))
+        content_parts.extend(self._format_section(
+            "Pull Request Info", metadata.get("pr"), "No PR information available"
+        ))
 
         self.update("\n".join(content_parts))
 
@@ -286,34 +246,24 @@ class MetadataTopDisplay(Markdown):
 class MetadataBottomDisplay(Markdown):
     """Widget to display notes and git information."""
 
+    @staticmethod
+    def _format_section(heading: str, content: str | None, fallback: str) -> list[str]:
+        """Format a markdown section with heading and content or fallback text."""
+        return [f"## {heading}", content if content else f"*{fallback}*", ""]
+
     def update_content(self, worktree_name: str) -> None:
         """Update the display with metadata for the given worktree."""
         if not worktree_name:
             self.update("*Select a worktree to view metadata*")
             return
 
-        # Get metadata and git info
         metadata = get_worktree_metadata(worktree_name)
         git_info = get_worktree_git_info(worktree_name)
 
-        # Format the content
-        content_parts = []
-
-        # Add notes if available
-        if metadata.get("notes"):
-            content_parts.extend([
-                "## Notes",
-                metadata["notes"],
-                "",
-            ])
-        else:
-            content_parts.extend([
-                "## Notes",
-                "*No notes available*",
-                "",
-            ])
-
-        # Add git information
+        content_parts: list[str] = []
+        content_parts.extend(self._format_section(
+            "Notes", metadata.get("notes"), "No notes available"
+        ))
         content_parts.extend([
             "## Git Information",
             "",
@@ -337,17 +287,14 @@ class WindowPreview(Widget):
 
     def compose(self) -> ComposeResult:
         """Compose the window preview with title and content."""
-        # Window title with index and name
         window_index = self.window_data.get("window_index", "?")
         window_name = self.window_data.get("window_name", "unknown")
         is_active = self.window_data.get("is_active", False)
 
-        # Add an asterisk to indicate the active window
         active_indicator = "*" if is_active else " "
         title = f"{active_indicator}{window_index}: {window_name}"
 
         yield Static(title, classes="window-title")
-        # Get content as string (we know it's always a string in our data structure)
         content = str(self.window_data.get("content", ""))
         yield WindowContent(content, classes="window-content")
 
@@ -380,39 +327,24 @@ class TmuxPanePreview(Widget):
 
     def watch_worktree_name(self, worktree_name: str) -> None:
         """React to worktree name changes and rebuild the windows display."""
-        # Get the container
         container = self.query_one("#windows-container", Horizontal)
-
-        # Clear existing windows
         container.remove_children()
 
         if not worktree_name:
-            # Show placeholder message
-            placeholder = Static("Select a worktree to view tmux pane preview", classes="preview-placeholder")
-            container.mount(placeholder)
+            container.mount(Static("Select a worktree to view tmux pane preview", classes="preview-placeholder"))
             return
 
-        # Get pane preview data
         preview_data = get_tmux_pane_preview(worktree_name)
 
-        # Check if we got an error message string
+        # String response means a status/error message
         if isinstance(preview_data, str):
-            # Show error/status message
-            if preview_data in ["Tmux not available", "No active tmux session", "No windows in session", "Empty pane"]:
-                placeholder = Static(preview_data, classes="preview-placeholder")
-            elif preview_data.startswith("Error capturing pane:"):
-                placeholder = Static(preview_data, classes="preview-error")
-            else:
-                placeholder = Static(preview_data, classes="preview-placeholder")
-
-            container.mount(placeholder)
+            css_class = "preview-error" if preview_data.startswith("Error capturing pane:") else "preview-placeholder"
+            container.mount(Static(preview_data, classes=css_class))
             return
 
-        # We have window data - create a preview for each window
-        if preview_data:
-            for window_data in preview_data:
-                window_preview = WindowPreview(window_data)
-                container.mount(window_preview)
+        # List of window data dicts
+        for window_data in preview_data:
+            container.mount(WindowPreview(window_data))
 
 
 class MetadataDisplay(VerticalScroll):
@@ -437,7 +369,6 @@ class MetadataDisplay(VerticalScroll):
             markdown.update("*Select a worktree to view PR description*")
             return
 
-        # Get metadata (now returns string directly)
         metadata = get_worktree_metadata(worktree_name)
 
         if metadata:
