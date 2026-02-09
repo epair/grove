@@ -25,28 +25,24 @@ class WorktreeFormScreen(ModalScreen[dict[str, str] | None]):
                 yield Button("Cancel", variant="default", id="cancel_button")
                 yield Button("Create", variant="primary", id="create_button")
 
+    def _submit_form(self) -> None:
+        """Validate and submit the worktree form."""
+        prefix = self.query_one("#prefix_input", Input).value
+        name = self.query_one("#name_input", Input).value
+        if name.strip():
+            self.dismiss({"prefix": prefix, "name": name})
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
         if event.button.id == "create_button":
-            prefix = self.query_one("#prefix_input", Input).value
-            name = self.query_one("#name_input", Input).value
-
-            if not name.strip():
-                return  # Don't submit if name is empty
-
-            self.dismiss({"prefix": prefix, "name": name})
+            self._submit_form()
         elif event.button.id == "cancel_button":
             self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in input fields."""
         if event.input.id == "name_input":
-            # Trigger create button when Enter is pressed in name field
-            prefix = self.query_one("#prefix_input", Input).value
-            name = event.input.value
-
-            if name.strip():
-                self.dismiss({"prefix": prefix, "name": name})
+            self._submit_form()
 
     def action_cancel(self) -> None:
         """Cancel the form and return to main app."""
@@ -97,6 +93,8 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
+    REVIEWERS = ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]
+
     def compose(self) -> ComposeResult:
         """Create the PR form layout."""
         with Vertical(id="pr_dialog"):
@@ -120,39 +118,30 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
                 yield Button("Cancel", variant="default", id="cancel_pr_button")
                 yield Button("Create PR", variant="primary", id="create_pr_button")
 
+    def _collect_reviewers(self) -> list[str]:
+        """Collect selected reviewers from checkboxes."""
+        return [
+            reviewer for reviewer in self.REVIEWERS
+            if self.query_one(f"#checkbox_{reviewer}", Checkbox).value
+        ]
+
+    def _submit_form(self) -> None:
+        """Validate and submit the PR form."""
+        title = self.query_one("#pr_title_input", Input).value
+        if title.strip():
+            self.dismiss({"title": title, "reviewers": self._collect_reviewers()})
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
         if event.button.id == "create_pr_button":
-            title = self.query_one("#pr_title_input", Input).value
-
-            if not title.strip():
-                return  # Don't submit if title is empty
-
-            # Collect selected reviewers
-            reviewers = []
-            for reviewer in ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]:
-                checkbox = self.query_one(f"#checkbox_{reviewer}", Checkbox)
-                if checkbox.value:
-                    reviewers.append(reviewer)
-
-            self.dismiss({"title": title, "reviewers": reviewers})
+            self._submit_form()
         elif event.button.id == "cancel_pr_button":
             self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in input fields."""
         if event.input.id == "pr_title_input":
-            title = event.input.value
-
-            if title.strip():
-                # Collect selected reviewers
-                reviewers = []
-                for reviewer in ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]:
-                    checkbox = self.query_one(f"#checkbox_{reviewer}", Checkbox)
-                    if checkbox.value:
-                        reviewers.append(reviewer)
-
-                self.dismiss({"title": title, "reviewers": reviewers})
+            self._submit_form()
 
     def action_cancel(self) -> None:
         """Cancel the form and return to main app."""
@@ -202,25 +191,21 @@ class SetupWizardScreen(ModalScreen[str | None]):
                 yield Button("Exit (Esc)", variant="default", id="exit_button")
                 yield Button("Confirm", variant="primary", id="confirm_button", classes="hidden")
 
+    def _hide_element(self, selector: str) -> None:
+        """Hide an element by selector, ignoring if it doesn't exist."""
+        try:
+            self.query_one(selector).add_class("hidden")
+        except Exception:
+            pass
+
     def action_custom_path(self) -> None:
         """Switch to custom path entry mode."""
         self.is_custom_mode = True
 
         # Hide repo list and show custom input
-        try:
-            self.query_one("#repo_list").add_class("hidden")
-            self.query_one("#detected_label").add_class("hidden")
-            self.query_one("#setup_hint").add_class("hidden")
-        except Exception:
-            # Elements might not exist if no repos detected
-            pass
-
-        try:
-            self.query_one("#no_repos_label").add_class("hidden")
-            self.query_one("#custom_hint").add_class("hidden")
-        except Exception:
-            # Elements might not exist if repos were detected
-            pass
+        for selector in ("#repo_list", "#detected_label", "#setup_hint",
+                         "#no_repos_label", "#custom_hint"):
+            self._hide_element(selector)
 
         self.query_one("#custom_label").remove_class("hidden")
         self.query_one("#custom_input").remove_class("hidden")
@@ -238,48 +223,34 @@ class SetupWizardScreen(ModalScreen[str | None]):
             selected_path = str(self.detected_repos[selected_index])
             self.dismiss(selected_path)
 
+    def _validate_and_submit_path(self, custom_path: str) -> None:
+        """Validate a repository path and dismiss with it if valid."""
+        if not custom_path:
+            self.notify("Please enter a path", severity="warning")
+            return
+
+        path_obj = Path(custom_path).expanduser()
+        if not path_obj.exists():
+            self.notify(f"Path does not exist: {custom_path}", severity="error")
+            return
+
+        if not (path_obj / ".bare").is_dir():
+            self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
+            return
+
+        self.dismiss(str(path_obj.resolve()))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
         if event.button.id == "confirm_button":
-            custom_path = self.query_one("#custom_input", Input).value.strip()
-
-            if not custom_path:
-                self.notify("Please enter a path", severity="warning")
-                return
-
-            # Validate path
-            path_obj = Path(custom_path).expanduser()
-            if not path_obj.exists():
-                self.notify(f"Path does not exist: {custom_path}", severity="error")
-                return
-
-            if not (path_obj / ".bare").is_dir():
-                self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
-                return
-
-            self.dismiss(str(path_obj.resolve()))
+            self._validate_and_submit_path(self.query_one("#custom_input", Input).value.strip())
         elif event.button.id == "exit_button":
             self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in custom path input."""
         if event.input.id == "custom_input":
-            custom_path = event.input.value.strip()
-
-            if not custom_path:
-                self.notify("Please enter a path", severity="warning")
-                return
-
-            path_obj = Path(custom_path).expanduser()
-            if not path_obj.exists():
-                self.notify(f"Path does not exist: {custom_path}", severity="error")
-                return
-
-            if not (path_obj / ".bare").is_dir():
-                self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
-                return
-
-            self.dismiss(str(path_obj.resolve()))
+            self._validate_and_submit_path(event.input.value.strip())
 
     def action_cancel(self) -> None:
         """Exit the wizard."""
@@ -446,23 +417,21 @@ class AddRepositoryScreen(ModalScreen[str | None]):
                 yield Button("Cancel (Esc)", variant="default", id="add_cancel_button")
                 yield Button("Confirm", variant="primary", id="add_confirm_button", classes="hidden")
 
+    def _hide_element(self, selector: str) -> None:
+        """Hide an element by selector, ignoring if it doesn't exist."""
+        try:
+            self.query_one(selector).add_class("hidden")
+        except Exception:
+            pass
+
     def action_custom_path(self) -> None:
         """Switch to custom path entry mode."""
         self.is_custom_mode = True
 
         # Hide repo list and show custom input
-        try:
-            self.query_one("#add_repo_list").add_class("hidden")
-            self.query_one("#add_detected_label").add_class("hidden")
-            self.query_one("#add_repo_hint").add_class("hidden")
-        except Exception:
-            pass
-
-        try:
-            self.query_one("#add_no_repos_label").add_class("hidden")
-            self.query_one("#add_custom_hint").add_class("hidden")
-        except Exception:
-            pass
+        for selector in ("#add_repo_list", "#add_detected_label", "#add_repo_hint",
+                         "#add_no_repos_label", "#add_custom_hint"):
+            self._hide_element(selector)
 
         self.query_one("#add_custom_label").remove_class("hidden")
         self.query_one("#add_custom_input").remove_class("hidden")
@@ -479,48 +448,34 @@ class AddRepositoryScreen(ModalScreen[str | None]):
             selected_path = str(self.detected_repos[selected_index])
             self.dismiss(selected_path)
 
+    def _validate_and_submit_path(self, custom_path: str) -> None:
+        """Validate a repository path and dismiss with it if valid."""
+        if not custom_path:
+            self.notify("Please enter a path", severity="warning")
+            return
+
+        path_obj = Path(custom_path).expanduser()
+        if not path_obj.exists():
+            self.notify(f"Path does not exist: {custom_path}", severity="error")
+            return
+
+        if not (path_obj / ".bare").is_dir():
+            self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
+            return
+
+        self.dismiss(str(path_obj.resolve()))
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
         if event.button.id == "add_confirm_button":
-            custom_path = self.query_one("#add_custom_input", Input).value.strip()
-
-            if not custom_path:
-                self.notify("Please enter a path", severity="warning")
-                return
-
-            # Validate path
-            path_obj = Path(custom_path).expanduser()
-            if not path_obj.exists():
-                self.notify(f"Path does not exist: {custom_path}", severity="error")
-                return
-
-            if not (path_obj / ".bare").is_dir():
-                self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
-                return
-
-            self.dismiss(str(path_obj.resolve()))
+            self._validate_and_submit_path(self.query_one("#add_custom_input", Input).value.strip())
         elif event.button.id == "add_cancel_button":
             self.dismiss(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         """Handle Enter key in custom path input."""
         if event.input.id == "add_custom_input":
-            custom_path = event.input.value.strip()
-
-            if not custom_path:
-                self.notify("Please enter a path", severity="warning")
-                return
-
-            path_obj = Path(custom_path).expanduser()
-            if not path_obj.exists():
-                self.notify(f"Path does not exist: {custom_path}", severity="error")
-                return
-
-            if not (path_obj / ".bare").is_dir():
-                self.notify(f"Path does not contain .bare directory: {custom_path}", severity="error")
-                return
-
-            self.dismiss(str(path_obj.resolve()))
+            self._validate_and_submit_path(event.input.value.strip())
 
     def action_cancel(self) -> None:
         """Cancel adding repository."""
