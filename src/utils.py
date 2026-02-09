@@ -1,6 +1,8 @@
 """Utility functions for Git worktree and tmux operations."""
 
+import datetime
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -15,6 +17,15 @@ from .config import get_repo_path, ConfigError
 # Structure: {worktree_name: (timestamp, pane_data)}
 _tmux_pane_cache: dict[str, tuple[float, list[dict[str, str | bool]] | str]] = {}
 TMUX_PANE_CACHE_TTL = 30.0  # seconds
+
+# Default return value for git log when no data is available
+_EMPTY_GIT_LOG: dict[str, Any] = {
+    "sync_status": "no-upstream",
+    "ahead_count": 0,
+    "behind_count": 0,
+    "comparison_branch": "",
+    "commits": []
+}
 
 
 def is_bare_git_repository() -> bool:
@@ -51,6 +62,71 @@ def session_exists(server: libtmux.Server, session_name: str) -> bool:
     except Exception:
         return False
 
+def _run_hydration_script(session: Any, worktree_path: Path, session_name: str) -> None:
+    """Find and run .tmux-sessionizer hydration script for a new session.
+
+    Searches for the hydration script in the worktree directory, its parent,
+    and the user's home directory (in that order).
+    """
+    hydration_script = None
+    script_dir = None
+
+    if (worktree_path / ".tmux-sessionizer").exists():
+        hydration_script = worktree_path / ".tmux-sessionizer"
+        script_dir = worktree_path
+    elif (worktree_path.parent / ".tmux-sessionizer").exists():
+        hydration_script = worktree_path.parent / ".tmux-sessionizer"
+        script_dir = worktree_path.parent
+    elif (Path.home() / ".tmux-sessionizer").exists():
+        hydration_script = Path.home() / ".tmux-sessionizer"
+        script_dir = Path.home()
+
+    if hydration_script and script_dir:
+        try:
+            session.cmd(
+                'run-shell',
+                '-b',
+                '-c', str(script_dir),
+                f"bash '.tmux-sessionizer' && tmux display-message -t '{session_name}' 'Session hydrated successfully' || tmux display-message -t '{session_name}' 'Session hydration failed'"
+            )
+        except Exception:
+            pass
+
+def _setup_new_session(server: libtmux.Server, session_name: str, worktree_path: Path) -> Any:
+    """Create a new tmux session, open pr.md in Neovim, and run hydration.
+
+    Returns the created session object.
+    """
+    session = server.new_session(
+        session_name=session_name,
+        start_directory=str(worktree_path),
+        attach=False
+    )
+
+    # Open pr.md in Neovim for new sessions
+    bare_parent = get_repo_path()
+
+    # Create metadata directory structure if it doesn't exist
+    metadata_dir = bare_parent / ".grove" / "metadata" / session_name
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+
+    # Create pr.md with template if it doesn't exist
+    pr_file = metadata_dir / "pr.md"
+    if not pr_file.exists():
+        template = "# Pull Request\n\nWhat are you building?\n\n"
+        pr_file.write_text(template)
+
+    # Open the pr file in Neovim in the first pane
+    try:
+        first_pane = session.windows[0].panes[0]
+        first_pane.send_keys(f"nvim {pr_file}")
+    except Exception:
+        pass
+
+    _run_hydration_script(session, worktree_path, session_name)
+
+    return session
+
 def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
     """Create or switch to a tmux session for a worktree (replaces tmux-sessionizer).
 
@@ -71,58 +147,7 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
 
         # Check if session already exists
         if not session_exists(server, session_name):
-            # Create new session detached with working directory
-            session = server.new_session(
-                session_name=session_name,
-                start_directory=str(worktree_path),
-                attach=False
-            )
-
-            # Open pr.md in Neovim for new sessions
-            bare_parent = get_repo_path()
-
-            # Create metadata directory structure if it doesn't exist
-            metadata_dir = bare_parent / ".grove" / "metadata" / session_name
-            metadata_dir.mkdir(parents=True, exist_ok=True)
-
-            # Create pr.md with template if it doesn't exist
-            pr_file = metadata_dir / "pr.md"
-            if not pr_file.exists():
-                template = "# Pull Request\n\nWhat are you building?\n\n"
-                pr_file.write_text(template)
-
-            # Open the pr file in Neovim in the first pane
-            try:
-                first_pane = session.windows[0].panes[0]
-                first_pane.send_keys(f"nvim {pr_file}")
-            except Exception:
-                # Continue even if opening Neovim fails
-                pass
-
-            # Run session hydration if .tmux-sessionizer file exists
-            hydration_script = None
-            if (worktree_path / ".tmux-sessionizer").exists():
-                hydration_script = worktree_path / ".tmux-sessionizer"
-                script_dir = worktree_path
-            elif (worktree_path.parent / ".tmux-sessionizer").exists():
-                hydration_script = worktree_path.parent / ".tmux-sessionizer"
-                script_dir = worktree_path.parent
-            elif (Path.home() / ".tmux-sessionizer").exists():
-                hydration_script = Path.home() / ".tmux-sessionizer"
-                script_dir = Path.home()
-
-            if hydration_script:
-                try:
-                    # Run hydration script using tmux run-shell
-                    session.cmd(
-                        'run-shell',
-                        '-b',
-                        '-c', str(script_dir),
-                        f"bash '.tmux-sessionizer' && tmux display-message -t '{session_name}' 'Session hydrated successfully' || tmux display-message -t '{session_name}' 'Session hydration failed'"
-                    )
-                except Exception:
-                    # Continue even if hydration fails
-                    pass
+            session = _setup_new_session(server, session_name, worktree_path)
         else:
             # Get existing session
             sessions = server.sessions.filter(session_name=session_name)
@@ -323,6 +348,127 @@ def get_worktree_git_status(worktree_name: str) -> dict[str, list[str]]:
     except Exception:
         return {"staged": [], "unstaged": [], "untracked": []}
 
+def _format_relative_date(timestamp: int) -> str:
+    """Format a commit timestamp as a human-readable relative date string."""
+    commit_date = datetime.datetime.fromtimestamp(timestamp)
+    now = datetime.datetime.now()
+    delta = now - commit_date
+
+    if delta.days > 365:
+        return f"{delta.days // 365} year{'s' if delta.days // 365 > 1 else ''} ago"
+    elif delta.days > 30:
+        return f"{delta.days // 30} month{'s' if delta.days // 30 > 1 else ''} ago"
+    elif delta.days > 0:
+        return f"{delta.days} day{'s' if delta.days > 1 else ''} ago"
+    elif delta.seconds > 3600:
+        return f"{delta.seconds // 3600} hour{'s' if delta.seconds // 3600 > 1 else ''} ago"
+    elif delta.seconds > 60:
+        return f"{delta.seconds // 60} minute{'s' if delta.seconds // 60 > 1 else ''} ago"
+    else:
+        return "just now"
+
+def _get_sync_status(repo: Repo, current_branch: Any) -> tuple[str, int, int, str, Any]:
+    """Determine sync status between local branch and its upstream/comparison branch.
+
+    Returns:
+        Tuple of (sync_status, ahead_count, behind_count, comparison_branch_name, comparison_ref)
+    """
+    # Get upstream branch
+    try:
+        upstream = current_branch.tracking_branch()
+    except Exception:
+        upstream = None
+
+    # If no upstream, try to use origin/main as comparison
+    comparison_branch: Any = upstream
+
+    if not upstream:
+        try:
+            repo.commit('origin/main')
+            comparison_branch = 'origin/main'
+        except Exception:
+            comparison_branch = None
+
+    sync_status = "no-upstream"
+    ahead_count = 0
+    behind_count = 0
+    comparison_branch_name = ""
+
+    if comparison_branch:
+        try:
+            branch_name = comparison_branch.name if hasattr(comparison_branch, 'name') else comparison_branch
+
+            # Strip "origin/" prefix for display purposes
+            display_name = branch_name
+            if display_name.startswith('origin/'):
+                display_name = display_name[7:]
+            comparison_branch_name = display_name
+
+            # Count commits ahead and behind
+            ahead_commits = list(repo.iter_commits(f'{branch_name}..{current_branch.name}'))
+            behind_commits = list(repo.iter_commits(f'{current_branch.name}..{branch_name}'))
+
+            ahead_count = len(ahead_commits)
+            behind_count = len(behind_commits)
+
+            if ahead_count == 0 and behind_count == 0:
+                sync_status = "up-to-date"
+            elif ahead_count > 0 and behind_count == 0:
+                sync_status = "ahead"
+            elif ahead_count == 0 and behind_count > 0:
+                sync_status = "behind"
+            else:
+                sync_status = "diverged"
+        except Exception:
+            pass
+
+    return sync_status, ahead_count, behind_count, comparison_branch_name, comparison_branch
+
+def _get_commit_list(repo: Repo, branch_name: str, comparison_branch: Any, max_count: int) -> list[dict[str, Any]]:
+    """Get formatted commit list with pushed status.
+
+    Args:
+        repo: GitPython Repo instance
+        branch_name: Name of the current branch
+        comparison_branch: The upstream/comparison branch reference (or None)
+        max_count: Maximum number of commits to retrieve
+
+    Returns:
+        List of commit dicts with 'hash', 'message', 'author', 'date', 'is_pushed'
+    """
+    commits: list[dict[str, Any]] = []
+    try:
+        commit_list = list(repo.iter_commits(branch_name, max_count=max_count))
+
+        # Get the set of pushed/existing commit hashes
+        pushed_commits: set[str] = set()
+        if comparison_branch:
+            try:
+                comp_name = comparison_branch.name if hasattr(comparison_branch, 'name') else comparison_branch
+                pushed_commit_list = list(repo.iter_commits(comp_name))
+                pushed_commits = {commit.hexsha for commit in pushed_commit_list}
+            except Exception:
+                pass
+
+        for commit in commit_list:
+            relative_date = _format_relative_date(commit.committed_date)
+
+            # Get commit message - ensure it's a string
+            message_str = str(commit.message).strip()
+            first_line = message_str.split('\n')[0] if '\n' in message_str else message_str
+
+            commits.append({
+                "hash": commit.hexsha[:7],
+                "message": first_line,
+                "author": commit.author.name,
+                "date": relative_date,
+                "is_pushed": commit.hexsha in pushed_commits
+            })
+    except Exception:
+        pass
+
+    return commits
+
 def get_worktree_git_log(worktree_name: str) -> dict[str, Any]:
     """Get git log information for a worktree with push/unpush status.
 
@@ -337,141 +483,22 @@ def get_worktree_git_log(worktree_name: str) -> dict[str, Any]:
     bare_parent = get_repo_path()
 
     if bare_parent is None:
-        return {
-            "sync_status": "no-upstream",
-            "ahead_count": 0,
-            "behind_count": 0,
-            "comparison_branch": "",
-            "commits": []
-        }
+        return _EMPTY_GIT_LOG.copy()
 
     worktree_path = bare_parent / worktree_name
     if not worktree_path.exists():
-        return {
-            "sync_status": "no-upstream",
-            "ahead_count": 0,
-            "behind_count": 0,
-            "comparison_branch": "",
-            "commits": []
-        }
+        return _EMPTY_GIT_LOG.copy()
 
     try:
         repo = Repo(str(worktree_path))
 
-        # Get current branch
         if repo.head.is_detached:
-            return {
-                "sync_status": "no-upstream",
-                "ahead_count": 0,
-                "behind_count": 0,
-                "comparison_branch": "",
-                "commits": []
-            }
+            return _EMPTY_GIT_LOG.copy()
 
         current_branch = repo.active_branch
 
-        # Get upstream branch
-        try:
-            upstream = current_branch.tracking_branch()
-        except Exception:
-            upstream = None
-
-        # If no upstream, try to use origin/main as comparison
-        # comparison_branch can be a RemoteReference or a string
-        comparison_branch: Any = upstream
-        comparison_branch_name = ""
-
-        if not upstream:
-            try:
-                # Check if origin/main exists
-                repo.commit('origin/main')
-                comparison_branch = 'origin/main'
-            except Exception:
-                comparison_branch = None
-
-        sync_status = "no-upstream"
-        ahead_count = 0
-        behind_count = 0
-
-        if comparison_branch:
-            # Get ahead/behind counts
-            try:
-                # Get the branch name string
-                branch_name = comparison_branch.name if hasattr(comparison_branch, 'name') else comparison_branch
-
-                # Strip "origin/" prefix for display purposes
-                display_name = branch_name
-                if display_name.startswith('origin/'):
-                    display_name = display_name[7:]  # Remove "origin/" (7 characters)
-                comparison_branch_name = display_name
-
-                # Count commits ahead and behind
-                ahead_commits = list(repo.iter_commits(f'{branch_name}..{current_branch.name}'))
-                behind_commits = list(repo.iter_commits(f'{current_branch.name}..{branch_name}'))
-
-                ahead_count = len(ahead_commits)
-                behind_count = len(behind_commits)
-
-                if ahead_count == 0 and behind_count == 0:
-                    sync_status = "up-to-date"
-                elif ahead_count > 0 and behind_count == 0:
-                    sync_status = "ahead"
-                elif ahead_count == 0 and behind_count > 0:
-                    sync_status = "behind"
-                else:
-                    sync_status = "diverged"
-            except Exception:
-                pass
-
-        # Get commit log (last 20 commits)
-        commits = []
-        try:
-            commit_list = list(repo.iter_commits(current_branch.name, max_count=20))
-
-            # Get the set of pushed/existing commit hashes
-            # Compare against the same branch we used for sync status (upstream or origin/main)
-            pushed_commits = set()
-            if comparison_branch:
-                try:
-                    branch_name = comparison_branch.name if hasattr(comparison_branch, 'name') else comparison_branch
-                    pushed_commit_list = list(repo.iter_commits(branch_name))
-                    pushed_commits = {commit.hexsha for commit in pushed_commit_list}
-                except Exception:
-                    pass
-
-            for commit in commit_list:
-                # Format relative date
-                import datetime
-                commit_date = datetime.datetime.fromtimestamp(commit.committed_date)
-                now = datetime.datetime.now()
-                delta = now - commit_date
-
-                if delta.days > 365:
-                    relative_date = f"{delta.days // 365} year{'s' if delta.days // 365 > 1 else ''} ago"
-                elif delta.days > 30:
-                    relative_date = f"{delta.days // 30} month{'s' if delta.days // 30 > 1 else ''} ago"
-                elif delta.days > 0:
-                    relative_date = f"{delta.days} day{'s' if delta.days > 1 else ''} ago"
-                elif delta.seconds > 3600:
-                    relative_date = f"{delta.seconds // 3600} hour{'s' if delta.seconds // 3600 > 1 else ''} ago"
-                elif delta.seconds > 60:
-                    relative_date = f"{delta.seconds // 60} minute{'s' if delta.seconds // 60 > 1 else ''} ago"
-                else:
-                    relative_date = "just now"
-
-                # Get commit message - ensure it's a string
-                message_str = str(commit.message).strip()
-                first_line = message_str.split('\n')[0] if '\n' in message_str else message_str
-
-                commits.append({
-                    "hash": commit.hexsha[:7],
-                    "message": first_line,
-                    "author": commit.author.name,
-                    "date": relative_date,
-                    "is_pushed": commit.hexsha in pushed_commits
-                })
-        except Exception:
-            pass
+        sync_status, ahead_count, behind_count, comparison_branch_name, comparison_ref = _get_sync_status(repo, current_branch)
+        commits = _get_commit_list(repo, current_branch.name, comparison_ref, 20)
 
         return {
             "sync_status": sync_status,
@@ -482,13 +509,53 @@ def get_worktree_git_log(worktree_name: str) -> dict[str, Any]:
         }
 
     except Exception:
+        return _EMPTY_GIT_LOG.copy()
+
+def _capture_window_data(window: Any) -> dict[str, str | bool]:
+    """Capture pane content data for a single tmux window.
+
+    Returns a dict with 'window_name', 'window_index', 'content', and 'is_active' keys.
+    """
+    window_name: str = str(window.window_name or f"window-{window.window_index}")
+    window_index: str = str(window.window_index or "0")
+    is_active: bool = window.window_active == '1'
+
+    if not window.panes:
         return {
-            "sync_status": "no-upstream",
-            "ahead_count": 0,
-            "behind_count": 0,
-            "comparison_branch": "",
-            "commits": []
+            "window_name": window_name,
+            "window_index": window_index,
+            "content": "No panes in window",
+            "is_active": is_active
         }
+
+    # Find the active pane
+    active_pane = None
+    for pane in window.panes:
+        if pane.pane_active == '1':
+            active_pane = pane
+            break
+
+    # If no active pane found, use the first pane
+    if active_pane is None:
+        active_pane = window.panes[0]
+
+    # Capture the pane content (visible portion only for performance)
+    try:
+        captured = active_pane.capture_pane()
+
+        if isinstance(captured, list):
+            content = '\n'.join(captured)
+        else:
+            content = str(captured) if captured else "Empty pane"
+    except Exception:
+        content = "Error capturing pane"
+
+    return {
+        "window_name": window_name,
+        "window_index": window_index,
+        "content": content,
+        "is_active": is_active
+    }
 
 def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | str:
     """Get tmux pane preview content for all windows in a worktree's active session.
@@ -542,55 +609,7 @@ def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | s
             _tmux_pane_cache[worktree_name] = (time.time(), result)
             return result
 
-        windows_data = []
-
-        # Process each window
-        for window in session.windows:
-            window_name: str = str(window.window_name or f"window-{window.window_index}")
-            window_index: str = str(window.window_index or "0")
-            is_active: bool = window.window_active == '1'
-
-            # Get the active pane in this window
-            if not window.panes:
-                window_dict: dict[str, str | bool] = {
-                    "window_name": window_name,
-                    "window_index": window_index,
-                    "content": "No panes in window",
-                    "is_active": is_active
-                }
-                windows_data.append(window_dict)
-                continue
-
-            # Find the active pane
-            active_pane = None
-            for pane in window.panes:
-                if pane.pane_active == '1':
-                    active_pane = pane
-                    break
-
-            # If no active pane found, use the first pane
-            if active_pane is None:
-                active_pane = window.panes[0]
-
-            # Capture the pane content (visible portion only for performance)
-            try:
-                captured = active_pane.capture_pane()
-
-                # If captured is a list, join it
-                if isinstance(captured, list):
-                    content = '\n'.join(captured)
-                else:
-                    content = str(captured) if captured else "Empty pane"
-            except Exception:
-                content = "Error capturing pane"
-
-            window_dict2: dict[str, str | bool] = {
-                "window_name": window_name,
-                "window_index": window_index,
-                "content": content,
-                "is_active": is_active
-            }
-            windows_data.append(window_dict2)
+        windows_data = [_capture_window_data(window) for window in session.windows]
 
         result = windows_data if windows_data else "No windows in session"
 
@@ -674,6 +693,80 @@ def create_worktree_with_branch(name: str, prefix: str) -> tuple[bool, str]:
     except Exception as e:
         return False, f"Unexpected error: {str(e)}"
 
+def _stop_docker_containers(worktree_dir: Path) -> str | None:
+    """Run docker stop script if present in the worktree directory.
+
+    Args:
+        worktree_dir: Path to the worktree directory
+
+    Returns:
+        Warning message string if there was an issue, None if successful or no script found
+    """
+    docker_stop_script = worktree_dir / "bin" / "docker" / "stop"
+
+    if not (docker_stop_script.exists() and docker_stop_script.is_file()):
+        return None
+
+    try:
+        stop_result = subprocess.run(
+            [str(docker_stop_script)],
+            cwd=str(worktree_dir),
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        if stop_result.returncode != 0 and stop_result.stderr:
+            return f"Docker cleanup had warnings: {stop_result.stderr.strip()}"
+
+    except subprocess.TimeoutExpired:
+        return "Docker cleanup timed out after 60 seconds"
+    except Exception as e:
+        return f"Docker cleanup failed: {str(e)}"
+
+    return None
+
+def _remove_worktree_directory(repo: Repo, worktree_dir: Path, worktree_dir_name: str) -> tuple[bool, str]:
+    """Remove a worktree's git registration and directory.
+
+    Args:
+        repo: GitPython Repo instance for the bare repository
+        worktree_dir: Path to the worktree directory
+        worktree_dir_name: Name of the worktree directory
+
+    Returns:
+        Tuple of (success: bool, error_message: str)
+    """
+    # Check if worktree is registered
+    try:
+        worktrees = repo.git.worktree('list').strip().split('\n')
+        worktree_registered = any(worktree_dir_name in wt for wt in worktrees)
+    except GitCommandError:
+        worktree_registered = False
+
+    # Remove the worktree if registered
+    if worktree_registered:
+        try:
+            repo.git.worktree('remove', '--force', str(worktree_dir))
+        except GitCommandError:
+            # Continue even if removal fails - we'll try directory removal
+            pass
+
+    # Remove the directory if it still exists
+    if worktree_dir.exists():
+        try:
+            shutil.rmtree(worktree_dir)
+        except (OSError, PermissionError) as e:
+            return False, f"Failed to remove directory: {str(e)}"
+
+    # Prune stale worktree entries
+    try:
+        repo.git.worktree('prune')
+    except GitCommandError:
+        pass
+
+    return True, ""
+
 def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
     """Remove a git worktree and its associated branch.
 
@@ -694,29 +787,7 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
 
     try:
         # Stop Docker containers if stop script exists
-        docker_stop_script = worktree_dir / "bin" / "docker" / "stop"
-        docker_stop_warning = None
-
-        if docker_stop_script.exists() and docker_stop_script.is_file():
-            try:
-                # Run the Docker stop script from the worktree directory
-                stop_result = subprocess.run(
-                    [str(docker_stop_script)],
-                    cwd=str(worktree_dir),
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-
-                # Note: We don't check returncode because the script may exit non-zero
-                # but we still want to continue with worktree deletion
-                if stop_result.returncode != 0 and stop_result.stderr:
-                    docker_stop_warning = f"Docker cleanup had warnings: {stop_result.stderr.strip()}"
-
-            except subprocess.TimeoutExpired:
-                docker_stop_warning = "Docker cleanup timed out after 60 seconds"
-            except Exception as e:
-                docker_stop_warning = f"Docker cleanup failed: {str(e)}"
+        docker_stop_warning = _stop_docker_containers(worktree_dir)
 
         # Open the bare repository
         repo = Repo(str(bare_repo_path))
@@ -725,42 +796,16 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
         branch_name = None
         if worktree_dir.exists():
             try:
-                # Open a repo object for the worktree to get its active branch
                 worktree_repo = Repo(str(worktree_dir))
                 if not worktree_repo.head.is_detached:
                     branch_name = worktree_repo.active_branch.name
             except Exception:
-                # If we can't determine the branch, that's okay - we'll skip branch deletion
                 pass
 
-        # Check if worktree is registered
-        try:
-            worktrees = repo.git.worktree('list').strip().split('\n')
-            worktree_registered = any(worktree_dir_name in wt for wt in worktrees)
-        except GitCommandError:
-            worktree_registered = False
-
-        # Remove the worktree if registered
-        if worktree_registered:
-            try:
-                repo.git.worktree('remove', '--force', str(worktree_dir))
-            except GitCommandError:
-                # Continue even if removal fails - we'll try directory removal
-                pass
-
-        # Remove the directory if it still exists
-        if worktree_dir.exists():
-            import shutil
-            try:
-                shutil.rmtree(worktree_dir)
-            except (OSError, PermissionError) as e:
-                return False, f"Failed to remove directory: {str(e)}"
-
-        # Prune stale worktree entries
-        try:
-            repo.git.worktree('prune')
-        except GitCommandError:
-            pass
+        # Remove worktree registration and directory
+        success, error_msg = _remove_worktree_directory(repo, worktree_dir, worktree_dir_name)
+        if not success:
+            return False, error_msg
 
         # Remove the branch if we found one
         branch_error = None
@@ -768,7 +813,6 @@ def remove_worktree_with_branch(worktree_dir_name: str) -> tuple[bool, str]:
             try:
                 repo.git.branch('-D', branch_name)
             except GitCommandError as e:
-                # Capture error but don't fail the whole operation
                 branch_error = str(e)
 
         # Build the final message with all warnings
