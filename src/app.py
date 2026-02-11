@@ -30,7 +30,7 @@ from .utils import (
 class GroveApp(App):
     """A Textual app to manage git worktrees."""
 
-    CSS_PATH = "../app.tcss"
+    CSS_PATH = "app.tcss"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("n", "new_worktree", "New worktree"),
