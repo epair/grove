@@ -19,10 +19,19 @@ Grove helps you manage multiple Git worktrees in an interactive TUI. Think `lazy
 
 ## Installation
 
+**Option 1: Install globally with pipx (recommended)**
 ```bash
 git clone https://github.com/yourusername/grove.git
 cd grove
-pip install -r requirements.txt
+pipx install .
+grove  # Run from anywhere
+```
+
+**Option 2: Run directly**
+```bash
+git clone https://github.com/yourusername/grove.git
+cd grove
+pip install -e .  # Install in editable mode
 python -m src
 ```
 
@@ -67,11 +76,17 @@ Config stored at `~/.config/grove/config`. Delete it to re-run setup wizard.
 ## Development
 
 ```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
 # Run tests
 python -m pytest tests/ -v
 
 # Type check
 mypy src/
+
+# Update global command after making changes
+pipx install . --force
 ```
 
 Built with [Textual](https://textual.textualize.io/).

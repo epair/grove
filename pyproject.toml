@@ -1,38 +1,52 @@
-[tool.poetry]
+[project]
 name = "grove"
 version = "0.1.0"
 description = "A Git Worktree and Tmux Session Manager - modern terminal interface for managing Git worktrees"
-authors = ["Your Name <your.email@example.com>"]
-license = "MIT"
-homepage = "https://github.com/yourusername/grove"
-repository = "https://github.com/yourusername/grove"
+authors = [{name = "Your Name", email = "your.email@example.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.13"
 keywords = ["git", "worktree", "tmux", "terminal", "tui", "textual"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Version Control :: Git",
     "Topic :: System :: Shells",
     "Topic :: Terminals",
 ]
-packages = [{include = "src"}, {include = "*.tcss"}]
 
-[tool.poetry.dependencies]
-python = "^3.13"
-textual = "^6.0.0"
-gitpython = "^3.1.0"
-libtmux = "^0.46.2"
-tomli-w = "^1.0.0"
+dependencies = [
+    "textual>=6.0.0",
+    "gitpython>=3.1.0",
+    "libtmux>=0.46.2",
+    "tomli-w>=1.0.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-mypy = "^1.0.0"
-pytest-asyncio = "^0.23.0"
-pytest-textual-snapshot = "^1.1.0"
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "mypy>=1.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-textual-snapshot>=1.1.0",
+]
 
-[tool.poetry.scripts]
+[project.scripts]
 grove = "src.__main__:main"
 
+[project.urls]
+Homepage = "https://github.com/yourusername/grove"
+Repository = "https://github.com/yourusername/grove"
+
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.tcss"]
