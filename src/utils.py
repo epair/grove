@@ -93,7 +93,7 @@ def _run_hydration_script(session: Any, worktree_path: Path, session_name: str) 
             pass
 
 def _setup_new_session(server: libtmux.Server, session_name: str, worktree_path: Path) -> Any:
-    """Create a new tmux session, open pr.md in Neovim, and run hydration.
+    """Create a new tmux session with metadata and run hydration.
 
     Returns the created session object.
     """
@@ -103,7 +103,6 @@ def _setup_new_session(server: libtmux.Server, session_name: str, worktree_path:
         attach=False
     )
 
-    # Open pr.md in Neovim for new sessions
     bare_parent = get_repo_path()
 
     # Create metadata directory structure if it doesn't exist
@@ -115,13 +114,6 @@ def _setup_new_session(server: libtmux.Server, session_name: str, worktree_path:
     if not pr_file.exists():
         template = "# Pull Request\n\nWhat are you building?\n\n"
         pr_file.write_text(template)
-
-    # Open the pr file in Neovim in the first pane
-    try:
-        first_pane = session.windows[0].panes[0]
-        first_pane.send_keys(f"nvim {pr_file}")
-    except Exception:
-        pass
 
     _run_hydration_script(session, worktree_path, session_name)
 
