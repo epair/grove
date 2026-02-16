@@ -233,7 +233,7 @@ class GroveApp(App):
             new_window.panes[0].send_keys(f"nvim {metadata_file}; exit")
 
             # Select the new window (make it active)
-            new_window.select_window()
+            new_window.select()
 
             # Switch to the session
             if is_inside_tmux():
