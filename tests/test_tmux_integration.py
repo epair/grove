@@ -56,7 +56,7 @@ class TestTmuxIntegration:
     async def test_sidebar_with_active_tmux_sessions(self, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that sidebar shows filled circles for directories with active tmux sessions."""
         # Mock tmux sessions where one matches a worktree directory
-        mock_sessions.return_value = {'feature-one', 'other-session'}
+        mock_sessions.return_value = {'example_repo/feature-one', 'other-session'}
         app = GroveApp()
 
         async with app.run_test() as pilot:

@@ -120,7 +120,7 @@ class TestSidebar:
     async def test_sidebar_with_tmux_and_pr_indicators(self, mock_pr_status: Any, mock_sessions: Any, change_to_example_repo: Path) -> None:
         """Test that sidebar shows both tmux and PR indicators correctly."""
         # Mock tmux session for bugfix-01 and PR for feature-one
-        mock_sessions.return_value = {'bugfix-01'}
+        mock_sessions.return_value = {'example_repo/bugfix-01'}
         mock_pr_status.return_value = {'feature-one'}
         app = GroveApp()
 

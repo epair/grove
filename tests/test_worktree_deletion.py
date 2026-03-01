@@ -354,7 +354,7 @@ class TestWorktreeDeletion:
             # Verify session_exists and kill_session were called
             mock_session_exists.assert_called()
             mock_server.sessions.filter.assert_called()
-            mock_session.kill_session.assert_called_once()
+            mock_session.kill.assert_called_once()
 
             # Verify success notification mentions both worktree and tmux session
             assert len(notifications) == 1
@@ -417,7 +417,7 @@ class TestWorktreeDeletion:
 
         # Mock tmux server with session that exists but kill_session raises exception
         mock_session = MagicMock()
-        mock_session.kill_session.side_effect = Exception("Failed to kill session")
+        mock_session.kill.side_effect = Exception("Failed to kill session")
         mock_server = MagicMock()
         mock_server.sessions.filter.return_value = [mock_session]
         mock_get_server.return_value = mock_server

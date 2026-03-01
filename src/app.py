@@ -24,6 +24,7 @@ from .utils import (
     get_tmux_server,
     session_exists,
     is_inside_tmux,
+    get_session_name,
 )
 
 
@@ -214,7 +215,7 @@ class GroveApp(App):
         worktree_root = get_repo_path()
         metadata_file = self._ensure_metadata_file(self.selected_worktree)
 
-        session_name = self.selected_worktree.replace('.', '-')
+        session_name = get_session_name(self.selected_worktree)
         worktree_path = worktree_root / self.selected_worktree
 
         session = self._get_or_create_tmux_session(session_name, worktree_path)
@@ -295,7 +296,7 @@ class GroveApp(App):
         if server and session_exists(server, session_name):
             found_sessions = server.sessions.filter(session_name=session_name)
             if found_sessions:
-                found_sessions[0].kill_session()
+                found_sessions[0].kill()
                 return True
         return False
 
@@ -321,7 +322,7 @@ class GroveApp(App):
             # Try to kill the associated tmux session
             tmux_killed = False
             try:
-                tmux_killed = self._kill_tmux_session(worktree_name)
+                tmux_killed = self._kill_tmux_session(get_session_name(worktree_name))
             except Exception:
                 if has_warning:
                     self.notify(f"{error_msg} Worktree deleted but failed to kill tmux session", severity="warning")
@@ -593,7 +594,7 @@ class GroveApp(App):
                 success, error_msg = remove_worktree_with_branch(worktree_name)
 
                 if success:
-                    self._kill_tmux_session(worktree_name)
+                    self._kill_tmux_session(get_session_name(worktree_name))
 
                     if error_msg:
                         self.notify(f"Auto-cleaned worktree {worktree_name}: {error_msg}", severity="warning")

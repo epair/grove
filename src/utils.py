@@ -62,6 +62,11 @@ def session_exists(server: libtmux.Server, session_name: str) -> bool:
     except Exception:
         return False
 
+def get_session_name(worktree_name: str) -> str:
+    """Get the full tmux session name for a worktree, prefixed with repo name."""
+    repo_name = get_repo_path().name.replace('.', '-')
+    return f"{repo_name}/{worktree_name.replace('.', '-')}"
+
 def _run_hydration_script(session: Any, worktree_path: Path, session_name: str) -> None:
     """Find and run .tmux-sessionizer hydration script for a new session.
 
@@ -106,7 +111,7 @@ def _setup_new_session(server: libtmux.Server, session_name: str, worktree_path:
     bare_parent = get_repo_path()
 
     # Create metadata directory structure if it doesn't exist
-    metadata_dir = bare_parent / ".grove" / "metadata" / session_name
+    metadata_dir = bare_parent / ".grove" / "metadata" / worktree_path.name
     metadata_dir.mkdir(parents=True, exist_ok=True)
 
     # Create empty pr.md if it doesn't exist
@@ -134,7 +139,7 @@ def create_or_switch_to_session(worktree_path: Path) -> tuple[bool, str]:
             return False, "Could not connect to tmux server"
 
         # Create session name from path basename (replace dots with dashes)
-        session_name = worktree_path.name.replace('.', '-')
+        session_name = get_session_name(worktree_path.name)
 
         # Check if session already exists
         if not session_exists(server, session_name):
@@ -577,7 +582,7 @@ def get_tmux_pane_preview(worktree_name: str) -> list[dict[str, str | bool]] | s
             return result
 
         # Create session name from worktree name (replace dots with dashes)
-        session_name = worktree_name.replace('.', '-')
+        session_name = get_session_name(worktree_name)
 
         # Check if session exists
         if not session_exists(server, session_name):

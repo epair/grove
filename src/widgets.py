@@ -20,6 +20,7 @@ from .utils import (
     get_worktree_git_status,
     get_tmux_pane_preview,
     get_worktree_git_log,
+    get_session_name,
 )
 
 
@@ -48,7 +49,7 @@ class Sidebar(ListView):
 
             if directories:
                 for directory in directories:
-                    icon = "●" if directory in sessions else "○"
+                    icon = "●" if get_session_name(directory) in sessions else "○"
                     pr_indicator = " [bold]PR[/bold]" if directory in pr_worktrees else ""
                     self.append(ListItem(Label(f"{icon}{pr_indicator} {directory}")))
             else:
