@@ -57,21 +57,18 @@ def clone_repository(url: str, name: str | None = None) -> int:
                 'remote "origin"', "fetch", "+refs/heads/*:refs/remotes/origin/*"
             )
 
-        # Step 9: Create .worktree-setup and .worktree-teardown files
-        print("Creating worktree setup scripts...")
-        setup_script = target_dir / ".worktree-setup"
-        setup_script.touch(mode=0o755, exist_ok=True)
-
-        teardown_script = target_dir / ".worktree-teardown"
-        teardown_script.touch(mode=0o755, exist_ok=True)
-
-        # Step 10: Create .grove directory structure
+        # Step 9: Create .grove directory structure
         print("Creating Grove directory structure...")
         grove_dir = target_dir / ".grove"
         grove_dir.mkdir(exist_ok=True)
 
         metadata_dir = grove_dir / "metadata"
         metadata_dir.mkdir(exist_ok=True)
+
+        # Step 10: Create .grove/.setup script
+        print("Creating worktree setup script...")
+        setup_script = grove_dir / ".setup"
+        setup_script.touch(mode=0o755, exist_ok=True)
 
         # Step 11: Register repository in Grove config
         print("Registering repository in Grove config...")
