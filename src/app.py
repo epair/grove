@@ -173,7 +173,7 @@ class GroveApp(App):
         metadata_dir.mkdir(parents=True, exist_ok=True)
 
         if not metadata_file.exists():
-            metadata_file.write_text("# Pull Request\n\nWhat are you building?\n\n")
+            metadata_file.write_text("")
 
         return metadata_file
 

@@ -109,11 +109,10 @@ def _setup_new_session(server: libtmux.Server, session_name: str, worktree_path:
     metadata_dir = bare_parent / ".grove" / "metadata" / session_name
     metadata_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create pr.md with template if it doesn't exist
+    # Create empty pr.md if it doesn't exist
     pr_file = metadata_dir / "pr.md"
     if not pr_file.exists():
-        template = "# Pull Request\n\nWhat are you building?\n\n"
-        pr_file.write_text(template)
+        pr_file.write_text("")
 
     _run_hydration_script(session, worktree_path, session_name)
 
