@@ -1,0 +1,3 @@
+[pr]
+reviewers = ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]
+default_reviewers = ["njm"]

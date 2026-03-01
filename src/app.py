@@ -12,7 +12,7 @@ from textual.containers import Vertical, Horizontal
 
 from .widgets import Sidebar, ScrollableContainer, GitStatusDisplay, GitLogDisplay, TmuxPanePreview, MetadataDisplay
 from .screens import WorktreeFormScreen, ConfirmDeleteScreen, PRFormScreen
-from .config import get_repo_path
+from .config import get_repo_path, get_reviewers
 from .utils import (
     get_worktree_directories,
     get_active_tmux_sessions,
@@ -159,7 +159,8 @@ class GroveApp(App):
             self.notify("No worktree selected", severity="warning")
             return
 
-        self.push_screen(PRFormScreen(), self.handle_pr_submission)
+        reviewers, default_reviewers = get_reviewers()
+        self.push_screen(PRFormScreen(reviewers, default_reviewers), self.handle_pr_submission)
 
     def _ensure_metadata_file(self, worktree_name: str) -> Path:
         """Create metadata directory and pr.md file if they don't exist.

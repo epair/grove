@@ -329,6 +329,45 @@ def migrate_v1_to_v2(config_data: dict) -> dict:
     }
 
 
+def get_reviewers() -> tuple[list[str], list[str]]:
+    """Load PR reviewer configuration from the repository's .grove/config.toml.
+
+    Reads [pr].reviewers and [pr].default_reviewers from the config file.
+
+    Returns:
+        Tuple of (reviewers, default_reviewers). Returns ([], []) if the
+        file doesn't exist, has no [pr] section, or has no reviewers key.
+    """
+    try:
+        repo_path = get_repo_path()
+    except ConfigError:
+        return [], []
+
+    config_file = repo_path / ".grove" / "config.toml"
+    if not config_file.exists():
+        return [], []
+
+    try:
+        with open(config_file, "rb") as f:
+            config_data = tomllib.load(f)
+    except (tomllib.TOMLDecodeError, OSError):
+        return [], []
+
+    pr_section = config_data.get("pr", {})
+    reviewers = pr_section.get("reviewers", [])
+    if not isinstance(reviewers, list):
+        return [], []
+
+    default_reviewers = pr_section.get("default_reviewers", [])
+    if not isinstance(default_reviewers, list):
+        default_reviewers = []
+
+    # Only keep defaults that are in the reviewers list
+    default_reviewers = [r for r in default_reviewers if r in reviewers]
+
+    return reviewers, default_reviewers
+
+
 def detect_potential_repositories() -> list[Path]:
     """Auto-detect potential .bare repository locations on the system.
 

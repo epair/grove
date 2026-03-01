@@ -93,7 +93,10 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 
-    REVIEWERS = ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]
+    def __init__(self, reviewers: list[str] | None = None, default_reviewers: list[str] | None = None) -> None:
+        super().__init__()
+        self.reviewers = reviewers or []
+        self.default_reviewers = default_reviewers or []
 
     def compose(self) -> ComposeResult:
         """Create the PR form layout."""
@@ -101,18 +104,30 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
             yield Label("Create Pull Request", id="pr_title")
             yield Label("PR Title:")
             yield Input(placeholder="Enter PR title", id="pr_title_input")
-            yield Label("Select Reviewers:", id="reviewers_label")
 
-            # Two-column layout for reviewers
-            with Horizontal(id="reviewers_container"):
-                with Vertical(classes="reviewer_column"):
-                    yield Checkbox("njm", value=True, id="checkbox_njm")
-                    yield Checkbox("swlkr", id="checkbox_swlkr")
-                    yield Checkbox("daviswahl", id="checkbox_daviswahl")
-                with Vertical(classes="reviewer_column"):
-                    yield Checkbox("BryceFrye", id="checkbox_BryceFrye")
-                    yield Checkbox("neddenriep", id="checkbox_neddenriep")
-                    yield Checkbox("gorilla076", id="checkbox_gorilla076")
+            if self.reviewers:
+                yield Label("Select Reviewers:", id="reviewers_label")
+
+                # Split reviewers into two columns
+                mid = (len(self.reviewers) + 1) // 2
+                col1 = self.reviewers[:mid]
+                col2 = self.reviewers[mid:]
+
+                with Horizontal(id="reviewers_container"):
+                    with Vertical(classes="reviewer_column"):
+                        for reviewer in col1:
+                            yield Checkbox(
+                                reviewer,
+                                value=reviewer in self.default_reviewers,
+                                id=f"checkbox_{reviewer}",
+                            )
+                    with Vertical(classes="reviewer_column"):
+                        for reviewer in col2:
+                            yield Checkbox(
+                                reviewer,
+                                value=reviewer in self.default_reviewers,
+                                id=f"checkbox_{reviewer}",
+                            )
 
             with Horizontal(id="pr_button_container"):
                 yield Button("Cancel", variant="default", id="cancel_pr_button")
@@ -121,7 +136,7 @@ class PRFormScreen(ModalScreen[dict[str, str | list[str]] | None]):
     def _collect_reviewers(self) -> list[str]:
         """Collect selected reviewers from checkboxes."""
         return [
-            reviewer for reviewer in self.REVIEWERS
+            reviewer for reviewer in self.reviewers
             if self.query_one(f"#checkbox_{reviewer}", Checkbox).value
         ]
 

@@ -9,6 +9,10 @@ from textual.widgets import Label, Input, Button, Checkbox
 
 from src import GroveApp, PRFormScreen
 
+# Test reviewer data matching tests/example_repo/.grove/config.toml
+TEST_REVIEWERS = ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]
+TEST_DEFAULT_REVIEWERS = ["njm"]
+
 
 class TestPRCreation:
     """Tests for PR creation feature."""
@@ -90,8 +94,7 @@ class TestPRCreation:
 
             form = app.screen
             # Check all reviewer checkboxes are present
-            reviewers = ["njm", "swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]
-            for reviewer in reviewers:
+            for reviewer in TEST_REVIEWERS:
                 checkbox = form.query_one(f"#checkbox_{reviewer}", Checkbox)
                 assert checkbox is not None
                 assert reviewer in str(checkbox.label)
@@ -113,8 +116,9 @@ class TestPRCreation:
             assert njm_checkbox.value is True
 
             # Check that others are not selected
-            other_reviewers = ["swlkr", "daviswahl", "BryceFrye", "neddenriep", "gorilla076"]
-            for reviewer in other_reviewers:
+            for reviewer in TEST_REVIEWERS:
+                if reviewer in TEST_DEFAULT_REVIEWERS:
+                    continue
                 checkbox = form.query_one(f"#checkbox_{reviewer}", Checkbox)
                 assert checkbox.value is False
 
@@ -391,6 +395,32 @@ class TestPRCreation:
 
             # Verify subprocess was called (form was submitted)
             assert mock_subprocess.called
+
+    @patch('src.utils.get_active_tmux_sessions')
+    @patch('src.config.get_repo_path')
+    async def test_pr_form_no_reviewers_when_config_missing(
+        self, mock_repo_path: Any, mock_sessions: Any, change_to_example_repo: Path, tmp_path: Path
+    ) -> None:
+        """Test that PR form shows no reviewer checkboxes when .grove/config.toml is missing."""
+        mock_sessions.return_value = set()
+        # Point to a repo path without a .grove/config.toml
+        bare_dir = tmp_path / ".bare"
+        bare_dir.mkdir()
+        mock_repo_path.return_value = tmp_path
+
+        app = GroveApp()
+
+        async with app.run_test() as pilot:
+            app.selected_worktree = "feature-one"
+            await pilot.press("p")
+            await pilot.pause()
+
+            form = app.screen
+            assert isinstance(form, PRFormScreen)
+            # No reviewer checkboxes should exist
+            assert len(form.query(Checkbox)) == 0
+            # The reviewers label should not be present
+            assert len(form.query("#reviewers_label")) == 0
 
     async def test_pr_form_handles_cancellation(self, change_to_example_repo: Path) -> None:
         """Test that PR form handles cancellation correctly."""
